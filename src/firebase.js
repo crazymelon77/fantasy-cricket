@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
+import { getFirestore, collection, getDocs } from "firebase/firestore";
 
-// Firebase configuration from your Firebase console
 const firebaseConfig = {
   apiKey: "AIzaSyBIs9DfwUvB9lNXt6tCg0hfkjrDA7-UMLs",
   authDomain: "fcric-d32e9.firebaseapp.com",
@@ -11,26 +11,46 @@ const firebaseConfig = {
   appId: "1:598708395031:web:8c095c8dea302c5e5c5052"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+export const db = getFirestore(app);
 
-// Sign in with Google
-export const signInWithGoogle = async () => {
+export const getAdminEmails = async () => {
   try {
-    const result = await signInWithPopup(auth, googleProvider);
-    return result.user; // Returns user details
+    const adminCollection = collection(db, "admins");
+    const adminSnapshot = await getDocs(adminCollection);
+    const adminEmails = adminSnapshot.docs.map(doc => doc.data().email?.toLowerCase()).filter(Boolean);
+    console.log("Fetched admin emails:", adminEmails);
+    return adminEmails;
   } catch (error) {
-    console.error("Google Sign-In Error:", error);
+    console.error("Error fetching admin emails:", error);
+    return [];
   }
 };
 
-// Sign out
+export const signInWithGoogle = async () => {
+  try {
+    // Force clear auth state before signing in
+    await auth.signOut();
+    const result = await signInWithPopup(auth, googleProvider);
+    return result.user;
+  } catch (error) {
+    console.error("Google Sign-In Error:", error);
+    throw error;
+  }
+};
+
 export const logOut = async () => {
   try {
-    await signOut(auth);
+    await auth.signOut();
+    // Clear any cached data
+    window.sessionStorage.clear();
+    window.localStorage.clear();
+    // Force a complete page refresh
+    window.location.href = '/auth';
   } catch (error) {
     console.error("Logout Error:", error);
+    throw error;
   }
 };
