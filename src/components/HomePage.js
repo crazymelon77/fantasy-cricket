@@ -20,7 +20,7 @@ const HomePage = () => {
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       console.log("Auth state changed:", currentUser?.email);
-      
+
       if (!currentUser) {
         setLoading(false);
         navigate("/auth");
@@ -51,9 +51,9 @@ const HomePage = () => {
     <div className="home-container p-4">
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center">
-          <img 
-            src={user.photoURL} 
-            alt="Profile" 
+          <img
+            src={user.photoURL}
+            alt="Profile"
             className="w-12 h-12 rounded-full mr-3"
           />
           <div>
@@ -61,7 +61,7 @@ const HomePage = () => {
             <p className="text-sm text-gray-600">{user.email}</p>
           </div>
         </div>
-        <button 
+        <button
           onClick={handleLogout}
           className="bg-red-500 text-white px-4 py-2 rounded"
         >
@@ -74,8 +74,14 @@ const HomePage = () => {
       </h1>
 
       {isAdmin && (
-        <div className="bg-green-100 p-3 rounded">
-          You have admin privileges
+        <div className="admin-controls bg-green-100 p-3 rounded">
+          <p>You have admin privileges.</p>
+          <button
+            onClick={() => navigate("/create-tournament")}
+            className="mt-4 bg-blue-500 text-white px-4 py-2 rounded"
+          >
+            Create Tournament
+          </button>
         </div>
       )}
     </div>

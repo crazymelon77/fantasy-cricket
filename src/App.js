@@ -2,6 +2,7 @@ import React from "react";
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import Auth from "./components/Auth";
 import HomePage from "./components/HomePage";
+import CreateTournament from "./components/CreateTournament"; // Import the new page
 import "./styles.css";
 
 function App() {
@@ -11,6 +12,7 @@ function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/create-tournament" element={<CreateTournament />} /> {/* New Route */}
         </Routes>
       </div>
     </Router>
