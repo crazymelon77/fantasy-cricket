@@ -4,26 +4,31 @@ import { useNavigate } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
 
 const HomePage = () => {
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false); // Tracks if user is an admin
+  const [user, setUser] = useState(null); // Stores authenticated user details
+  const [loading, setLoading] = useState(true); // Loading state before authentication is confirmed
   const navigate = useNavigate();
 
+  /**
+   * Checks if the logged-in user is an admin by comparing their email with stored admin emails.
+   * @param {object} currentUser - The currently authenticated user.
+   */
+  const checkAdminStatus = async (currentUser) => {
+    if (!currentUser) return;
+    const adminEmails = await getAdminEmails();
+    setIsAdmin(adminEmails.includes(currentUser.email?.toLowerCase()));
+    setLoading(false);
+  };
+
+  /**
+   * Subscribes to Firebase authentication state changes.
+   * Redirects unauthenticated users to the login page.
+   */
   useEffect(() => {
-    const checkAdminStatus = async (currentUser) => {
-      if (!currentUser) return;
-      const adminEmails = await getAdminEmails();
-      const isUserAdmin = adminEmails.includes(currentUser.email?.toLowerCase());
-      setIsAdmin(isUserAdmin);
-      setLoading(false);
-    };
-
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      console.log("Auth state changed:", currentUser?.email);
-
       if (!currentUser) {
         setLoading(false);
-        navigate("/auth");
+        navigate("/auth"); // Redirect to login page if not authenticated
         return;
       }
 
@@ -31,17 +36,22 @@ const HomePage = () => {
       await checkAdminStatus(currentUser);
     });
 
-    return () => unsubscribe();
+    return () => unsubscribe(); // Cleanup subscription on component unmount
   }, [navigate]);
 
+  /**
+   * Handles user logout and redirects to login page.
+   */
   const handleLogout = async () => {
     await logOut();
   };
 
+  // Show loading message until authentication check completes
   if (loading) {
     return <div className="text-center p-4">Loading...</div>;
   }
 
+  // Redirect to login page if user is null
   if (!user) {
     navigate("/auth");
     return null;
@@ -49,11 +59,12 @@ const HomePage = () => {
 
   return (
     <div className="home-container p-4">
+      {/* User Profile Section */}
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center">
-          <img
-            src={user.photoURL}
-            alt="Profile"
+          <img 
+            src={user.photoURL} 
+            alt="Profile" 
             className="w-12 h-12 rounded-full mr-3"
           />
           <div>
@@ -61,7 +72,9 @@ const HomePage = () => {
             <p className="text-sm text-gray-600">{user.email}</p>
           </div>
         </div>
-        <button
+
+        {/* Logout Button */}
+        <button 
           onClick={handleLogout}
           className="bg-red-500 text-white px-4 py-2 rounded"
         >
@@ -69,16 +82,16 @@ const HomePage = () => {
         </button>
       </div>
 
-      <h1 className="text-2xl font-bold mb-4">
-        {isAdmin ? "Admin Dashboard" : "User Dashboard"}
-      </h1>
+      {/* Dashboard Header */}
+      <h1 className="text-2xl font-bold mb-4">{isAdmin ? "Admin Dashboard" : "User Dashboard"}</h1>
 
+      {/* Admin-only Controls */}
       {isAdmin && (
-        <div className="admin-controls bg-green-100 p-3 rounded">
+        <div className="bg-green-100 p-3 rounded">
           <p>You have admin privileges.</p>
-          <button
-            onClick={() => navigate("/create-tournament")}
-            className="mt-4 bg-blue-500 text-white px-4 py-2 rounded"
+          <button 
+            onClick={() => navigate("/create-tournament")} 
+            className="bg-blue-500 text-white px-4 py-2 rounded mt-4"
           >
             Create Tournament
           </button>
