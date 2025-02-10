@@ -1,13 +1,31 @@
 import React, { useEffect, useState } from "react";
-import { auth, getAdminEmails, logOut } from "../firebase";
+import { auth, getAdminEmails, logOut, db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
+import { collection, getDocs } from "firebase/firestore";
 
 const HomePage = () => {
   const [isAdmin, setIsAdmin] = useState(false); // Tracks if user is an admin
   const [user, setUser] = useState(null); // Stores authenticated user details
   const [loading, setLoading] = useState(true); // Loading state before authentication is confirmed
+  const [tournaments, setTournaments] = useState([]); // Stores active tournaments
   const navigate = useNavigate();
+
+  /**
+   * Fetches active tournaments from Firestore and updates the state.
+   */
+  const fetchTournaments = async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "tournaments"));
+      const activeTournaments = querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(tournament => tournament.active); // Only fetch active tournaments
+
+      setTournaments(activeTournaments);
+    } catch (error) {
+      console.error("Error fetching tournaments:", error);
+    }
+  };
 
   /**
    * Checks if the logged-in user is an admin by comparing their email with stored admin emails.
@@ -17,7 +35,6 @@ const HomePage = () => {
     if (!currentUser) return;
     const adminEmails = await getAdminEmails();
     setIsAdmin(adminEmails.includes(currentUser.email?.toLowerCase()));
-    setLoading(false);
   };
 
   /**
@@ -34,6 +51,8 @@ const HomePage = () => {
 
       setUser(currentUser);
       await checkAdminStatus(currentUser);
+      await fetchTournaments(); // Fetch active tournaments after user login
+      setLoading(false);
     });
 
     return () => unsubscribe(); // Cleanup subscription on component unmount
@@ -82,18 +101,30 @@ const HomePage = () => {
         </button>
       </div>
 
-      {/* Dashboard Header */}
-      <h1 className="text-2xl font-bold mb-4">{isAdmin ? "Admin Dashboard" : "User Dashboard"}</h1>
+      {/* Active Tournaments Section */}
+      <h2 className="text-2xl font-bold mb-4">Active Tournaments</h2>
+      {tournaments.length === 0 ? (
+        <p>No active tournaments available.</p>
+      ) : (
+        <div className="tournament-list">
+		  {tournaments.map(tournament => (
+			<div key={tournament.id} className="p-2 border-b">
+			  {tournament.name}
+			</div>
+		  ))}
+		</div>
+      )}
 
-      {/* Admin-only Controls */}
+      {/* Admin Dashboard Section */}
       {isAdmin && (
-        <div className="bg-green-100 p-3 rounded">
+        <div className="bg-green-100 p-3 rounded mt-6">
+          <h2 className="text-xl font-bold mb-2">Admin Dashboard</h2>
           <p>You have admin privileges.</p>
           <button 
             onClick={() => navigate("/create-tournament")} 
             className="bg-blue-500 text-white px-4 py-2 rounded mt-4"
           >
-            Create Tournament
+            Manage Tournaments
           </button>
         </div>
       )}
