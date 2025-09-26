@@ -71,9 +71,48 @@ const EditTournament = () => {
     updatedTeams[teamIndex].players.splice(playerIndex, 1);
     setTournament({ ...tournament, teams: updatedTeams });
   };
+  
+  const handlePlayerChange = (teamIndex, playerIndex, field, value) => {
+	const updatedTeams = [...tournament.teams];
+	updatedTeams[teamIndex].players[playerIndex][field] = value;
+	setTournament({ ...tournament, teams: updatedTeams });
+  };
+
+  const handleImportCSV = (e, teamIndex) => {
+	  const file = e.target.files[0];
+	  if (!file) return;
+
+	  const reader = new FileReader();
+	  reader.onload = (event) => {
+		const lines = event.target.result
+		  .split("\n")
+		  .map((line) => line.trim())
+		  .filter(Boolean);
+
+		const parsedPlayers = lines.map((line) => {
+		  const [playerName, role, value] = line.split(",").map((x) => x.trim());
+		  return {
+			playerName,
+			role,
+			value: value ? Number(value) : 100,
+		  };
+		});
+
+		const updatedTeams = [...tournament.teams];
+		updatedTeams[teamIndex].players.push(...parsedPlayers);
+		setTournament({ ...tournament, teams: updatedTeams });
+	  };
+	  reader.readAsText(file);
+  };
 
   // ---------------- STAGES & MATCHES ----------------
-
+  const handleStageChange = (stageIndex, field, value) => {
+	console.log("Updating stage", stageIndex, field, value);
+	const updatedStages = [...tournament.stages];
+	updatedStages[stageIndex][field] = value;
+	setTournament({ ...tournament, stages: updatedStages });
+  };
+  
   const handleAddStage = () => {
     setTournament({
       ...tournament,
@@ -160,34 +199,53 @@ const EditTournament = () => {
               }}
             />
             <button onClick={() => handleRemoveTeam(index)}>Remove Team</button>
-            <h4>Players</h4>
-            {team.players?.map((player, playerIndex) => (
-              <div key={playerIndex}>
-                <input
-                  type="text"
-                  placeholder="Player Name"
-                  value={player.playerName}
-                  onChange={(e) => handleMatchChange(index, playerIndex, "playerName", e.target.value)}
-                />
-                <select
-                  value={player.role}
-                  onChange={(e) => handleMatchChange(index, playerIndex, "role", e.target.value)}
-                >
-                  <option value="Batsman">Batsman</option>
-                  <option value="Bowler">Bowler</option>
-                  <option value="All Rounder">All Rounder</option>
-                  <option value="Wicket Keeper">Wicket Keeper</option>
-                </select>
-                <input
-                  type="number"
-                  placeholder="Value"
-                  value={player.value}
-                  onChange={(e) => handleMatchChange(index, playerIndex, "value", e.target.value)}
-                />
-                <button onClick={() => handleRemovePlayer(index, playerIndex)}>Remove Player</button>
-              </div>
-            ))}
-            <button onClick={() => handleAddPlayer(index)}>Add Player</button>
+			<button onClick={() => document.getElementById(`csv-${index}`).click()}>
+			  Import
+			</button>
+			<input
+			  id={`csv-${index}`}
+			  type="file"
+			  accept=".csv"
+			  style={{ display: "none" }}
+			  onChange={(e) => handleImportCSV(e, index)}
+			/>
+            
+			<h4>Players</h4>
+			{team.players?.map((player, playerIndex) => (
+			  <div key={playerIndex}>
+				<input
+				  type="text"
+				  placeholder="Player Name"
+				  value={player.playerName}
+				  onChange={(e) =>
+					handlePlayerChange(index, playerIndex, "playerName", e.target.value)
+				  }
+				/>
+				<select
+				  value={player.role}
+				  onChange={(e) =>
+					handlePlayerChange(index, playerIndex, "role", e.target.value)
+				  }
+				>
+				  <option value="Batsman">Batsman</option>
+				  <option value="Bowler">Bowler</option>
+				  <option value="All Rounder">All Rounder</option>
+				  <option value="Wicket Keeper">Wicket Keeper</option>
+				</select>
+				<input
+				  type="number"
+				  placeholder="Value"
+				  value={player.value}
+				  onChange={(e) =>
+					handlePlayerChange(index, playerIndex, "value", e.target.value)
+				  }
+				/>
+				<button onClick={() => handleRemovePlayer(index, playerIndex)}>
+				  Remove Player
+				</button>
+			  </div>
+			))}
+			<button onClick={() => handleAddPlayer(index)}>Add Player</button>
           </div>
         ))}
         <button onClick={handleAddTeam}>Add Team</button>
@@ -201,10 +259,17 @@ const EditTournament = () => {
       <input
         type="text"
         placeholder="Stage Name"
-        value={stage.stageName}
-        onChange={(e) => handleMatchChange(stageIndex, -1, "stageName", e.target.value)}
+        value={stage.name}
+        onChange={(e) => handleStageChange(stageIndex, "name", e.target.value)}
       />
       <button onClick={() => handleRemoveStage(stageIndex)}>Remove Stage</button>
+
+		<label>Max Subs:</label>
+		<input
+		  type="number"
+		  value={stage.subsAllowed}
+		  onChange={(e) => handleStageChange(stageIndex, "subsAllowed", Number(e.target.value))}
+	  />
 
       <h4>Matches</h4>
       {stage.matches?.map((match, matchIndex) => (
