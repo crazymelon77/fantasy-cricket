@@ -3,7 +3,8 @@ import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import Auth from "./components/Auth";
 import HomePage from "./components/HomePage";
 import CreateTournament from "./components/CreateTournament"; 
-import EditTournament from "./components/EditTournament"; // Import the new page
+import EditTournament from "./components/EditTournament"; 
+import JoinTournament from "./components/JoinTournament";// Import the new page
 import "./styles.css";
 
 function App() {
@@ -15,6 +16,7 @@ function App() {
           <Route path="/auth" element={<Auth />} />
           <Route path="/create-tournament" element={<CreateTournament />} />
           <Route path="/edit-tournament/:tournamentId" element={<EditTournament />} /> {/* New Route */}
+		  <Route path="/tournament/:id" element={<JoinTournament />} />
         </Routes>
       </div>
     </Router>
@@ -22,3 +24,5 @@ function App() {
 }
 
 export default App;
+
+

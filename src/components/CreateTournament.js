@@ -34,12 +34,11 @@ const CreateTournament = () => {
       await addDoc(collection(db, "tournaments"), {
         name: tournamentName,
         type: "classic", // Default tournament type
-        maxBudget,
         active: false, // Default state
         stages: [], // Initialize with an empty stages array
       });
       setTournamentName("");
-      setMaxBudget(1000000000);
+      setMaxBudget(1100);
       console.log("Tournament created successfully.");
       const updatedTournaments = await getTournaments();
       setTournaments(updatedTournaments);
@@ -70,10 +69,6 @@ const CreateTournament = () => {
       <form onSubmit={handleCreateTournament}>
         <label>Tournament Name:</label>
         <input type="text" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} required />
-
-        <label>Max Budget for Fantasy Teams:</label>
-        <input type="number" value={maxBudget} onChange={(e) => setMaxBudget(Number(e.target.value))} min="50" />
-
         <button type="submit">Create Tournament</button>
       </form>
 

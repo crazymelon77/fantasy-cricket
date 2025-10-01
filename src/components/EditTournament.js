@@ -50,7 +50,7 @@ const EditTournament = () => {
   const handleAddTeam = () => {
     setTournament({
       ...tournament,
-      teams: [...(tournament.teams || []), { teamName: "", players: [] }],
+      teams: [...(tournament.teams || []), { name: "", players: [] }],
     });
   };
 
@@ -104,6 +104,34 @@ const EditTournament = () => {
 	  };
 	  reader.readAsText(file);
   };
+  
+  const handleImportCSVForStageTeam = (e, stageIndex, teamIndex) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    const lines = event.target.result
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const parsedPlayers = lines.map((line) => {
+      const [playerName, role, value] = line.split(",").map((x) => x.trim());
+      return {
+        playerName,
+        role,
+        value: value ? Number(value) : 100,
+      };
+    });
+
+    const updatedStages = [...tournament.stages];
+    updatedStages[stageIndex].teams[teamIndex].players.push(...parsedPlayers);
+    setTournament({ ...tournament, stages: updatedStages });
+  };
+  reader.readAsText(file);
+};
+
 
   // ---------------- STAGES & MATCHES ----------------
   const handleStageChange = (stageIndex, field, value) => {
@@ -131,9 +159,8 @@ const EditTournament = () => {
     updatedStages[stageIndex].matches.push({
       team1: "TBD",
       team2: "TBD",
-      date: "",
-      time: "",
-      cutoff: "",
+      matchDate: null,
+      cutoff: null,
     });
     setTournament({ ...tournament, stages: updatedStages });
   };
@@ -154,6 +181,14 @@ const EditTournament = () => {
     return <div>Loading...</div>;
   }
 
+	const formatForInput = (date) => {
+	  if (!date) return "";
+	  const d = date instanceof Date ? date : date.toDate ? date.toDate() : new Date(date);
+	  const tzOffset = d.getTimezoneOffset() * 60000; // offset in ms
+	  return new Date(d - tzOffset).toISOString().slice(0, 16);
+	};
+
+
   return (
     <div className="edit-tournament-container" style={{ padding: "20px", overflowY: "auto", maxHeight: "100vh" }}>
       <h2>Edit Tournament</h2>
@@ -163,12 +198,7 @@ const EditTournament = () => {
         value={tournament.name}
         onChange={(e) => setTournament({ ...tournament, name: e.target.value })}
       />
-      <label>Max Budget:</label>
-      <input
-        type="number"
-        value={tournament.maxBudget}
-        onChange={(e) => setTournament({ ...tournament, maxBudget: Number(e.target.value) })}
-      />
+
       <label>Type:</label>
       <select
         value={tournament.type}
@@ -183,166 +213,645 @@ const EditTournament = () => {
         onChange={(e) => setTournament({ ...tournament, active: e.target.checked })}
       />
 
-      {/* Teams Section */}
-      <div style={{ marginTop: "20px" }}>
-        <h3>Teams</h3>
-        {tournament.teams?.map((team, index) => (
-          <div key={index} style={{ marginBottom: "20px", padding: "10px", border: "1px solid #ddd" }}>
-            <input
-              type="text"
-              placeholder="Team Name"
-              value={team.teamName}
-              onChange={(e) => {
-                const updatedTeams = [...tournament.teams];
-                updatedTeams[index].teamName = e.target.value;
-                setTournament({ ...tournament, teams: updatedTeams });
-              }}
-            />
-            <button onClick={() => handleRemoveTeam(index)}>Remove Team</button>
-			<button onClick={() => document.getElementById(`csv-${index}`).click()}>
-			  Import
-			</button>
-			<input
-			  id={`csv-${index}`}
-			  type="file"
-			  accept=".csv"
-			  style={{ display: "none" }}
-			  onChange={(e) => handleImportCSV(e, index)}
-			/>
-            
-			<h4>Players</h4>
-			{team.players?.map((player, playerIndex) => (
-			  <div key={playerIndex}>
-				<input
-				  type="text"
-				  placeholder="Player Name"
-				  value={player.playerName}
-				  onChange={(e) =>
-					handlePlayerChange(index, playerIndex, "playerName", e.target.value)
-				  }
-				/>
-				<select
-				  value={player.role}
-				  onChange={(e) =>
-					handlePlayerChange(index, playerIndex, "role", e.target.value)
-				  }
-				>
-				  <option value="Batsman">Batsman</option>
-				  <option value="Bowler">Bowler</option>
-				  <option value="All Rounder">All Rounder</option>
-				  <option value="Wicket Keeper">Wicket Keeper</option>
-				</select>
+
+		{/* Stages & Matches */}
+		<div style={{ marginTop: "20px" }}>
+		  <h3>Stages & Matches</h3>
+		  {tournament.stages?.map((stage, stageIndex) => (
+			<div
+			  key={stageIndex}
+			  style={{ marginBottom: "20px", padding: "10px", border: "1px solid #ddd" }}
+			>
+			  <input
+				type="text"
+				placeholder="Stage Name"
+				value={stage.name}
+				onChange={(e) => handleStageChange(stageIndex, "name", e.target.value)}
+			  />
+			  <button onClick={() => handleRemoveStage(stageIndex)}>Remove Stage</button>
+
+			  <label>Max Subs:</label>
+			  <input
+				type="number"
+				value={stage.subsAllowed}
+				onChange={(e) =>
+				  handleStageChange(stageIndex, "subsAllowed", Number(e.target.value))
+				}
+			  />
+			  <label>Budget:</label>
 				<input
 				  type="number"
-				  placeholder="Value"
-				  value={player.value}
-				  onChange={(e) =>
-					handlePlayerChange(index, playerIndex, "value", e.target.value)
-				  }
+				  value={stage.budget || 0}
+				  onChange={(e) => {
+					const updatedStages = [...tournament.stages];
+					updatedStages[stageIndex].budget = Number(e.target.value);
+					setTournament({ ...tournament, stages: updatedStages });
+				  }}
 				/>
-				<button onClick={() => handleRemovePlayer(index, playerIndex)}>
-				  Remove Player
-				</button>
+
+
+			  {/* Role Composition */}
+			  <h4>Role Composition</h4>
+			  <div>
+				<label>Batsmen:</label>
+				<input
+				  type="number"
+				  value={stage.roleComposition?.batsman || 0}
+				  onChange={(e) => {
+					const updatedStages = [...tournament.stages];
+					updatedStages[stageIndex].roleComposition = {
+					  ...updatedStages[stageIndex].roleComposition,
+					  batsman: Number(e.target.value),
+					};
+					setTournament({ ...tournament, stages: updatedStages });
+				  }}
+				/>
 			  </div>
-			))}
-			<button onClick={() => handleAddPlayer(index)}>Add Player</button>
-          </div>
-        ))}
-        <button onClick={handleAddTeam}>Add Team</button>
-      </div>
+			  <div>
+				<label>Bowlers:</label>
+				<input
+				  type="number"
+				  value={stage.roleComposition?.bowler || 0}
+				  onChange={(e) => {
+					const updatedStages = [...tournament.stages];
+					updatedStages[stageIndex].roleComposition = {
+					  ...updatedStages[stageIndex].roleComposition,
+					  bowler: Number(e.target.value),
+					};
+					setTournament({ ...tournament, stages: updatedStages });
+				  }}
+				/>
+			  </div>
+			  <div>
+				<label>All Rounders:</label>
+				<input
+				  type="number"
+				  value={stage.roleComposition?.allRounder || 0}
+				  onChange={(e) => {
+					const updatedStages = [...tournament.stages];
+					updatedStages[stageIndex].roleComposition = {
+					  ...updatedStages[stageIndex].roleComposition,
+					  allRounder: Number(e.target.value),
+					};
+					setTournament({ ...tournament, stages: updatedStages });
+				  }}
+				/>
+			  </div>
+			{/* Scoring Rules */}
+			
+			<h4>Scoring Rules – General</h4>
+			<div>
+			  <label>Points for Win:</label>
+			  <input
+				type="number"
+				value={stage.scoring?.general?.perWin ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					general: {
+					  ...updatedStages[stageIndex].scoring?.general,
+					  perWin: Number(e.target.value),
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			</div>
+			<div>
+			  <label>Points for Selection (played match):</label>
+			  <input
+				type="number"
+				value={stage.scoring?.general?.perSelection ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					general: {
+					  ...updatedStages[stageIndex].scoring?.general,
+					  perSelection: Number(e.target.value),
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			</div>
+			
+			
+			
+			<h4>Scoring Rules – Batting</h4>
+			<div>
+			  <label>Points per Run:</label>
+			  <input
+				type="number"
+				value={stage.scoring?.batting?.perRun ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					batting: {
+					  ...updatedStages[stageIndex].scoring?.batting,
+					  perRun: Number(e.target.value),
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			</div>
+			<div>
+			  <label>Points per Ball Faced:</label>
+			  <input
+				type="number"
+				value={stage.scoring?.batting?.perBallFaced ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					batting: {
+					  ...updatedStages[stageIndex].scoring?.batting,
+					  perBallFaced: Number(e.target.value),
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			</div>
+			<div>
+			  <label>Points per 4:</label>
+			  <input
+				type="number"
+				value={stage.scoring?.batting?.perFour ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					batting: {
+					  ...updatedStages[stageIndex].scoring?.batting,
+					  perFour: Number(e.target.value),
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			</div>
+			<div>
+			  <label>Points per 6:</label>
+			  <input
+				type="number"
+				value={stage.scoring?.batting?.perSix ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					batting: {
+					  ...updatedStages[stageIndex].scoring?.batting,
+					  perSix: Number(e.target.value),
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			</div>
+			<div>
+			  <label>Bonus points every </label>
+			  <input
+				type="number"
+				style={{ width: "60px" }}
+				value={stage.scoring?.batting?.bonusEveryXRuns?.x ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					batting: {
+					  ...updatedStages[stageIndex].scoring?.batting,
+					  bonusEveryXRuns: {
+						...(updatedStages[stageIndex].scoring?.batting?.bonusEveryXRuns || {}),
+						x: Number(e.target.value),
+						points: stage.scoring?.batting?.bonusEveryXRuns?.points ?? 0,
+					  },
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			  <label> runs: </label>
+			  <input
+				type="number"
+				style={{ width: "60px" }}
+				value={stage.scoring?.batting?.bonusEveryXRuns?.points ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					batting: {
+					  ...updatedStages[stageIndex].scoring?.batting,
+					  bonusEveryXRuns: {
+						...(updatedStages[stageIndex].scoring?.batting?.bonusEveryXRuns || {}),
+						x: stage.scoring?.batting?.bonusEveryXRuns?.x ?? 0,
+						points: Number(e.target.value),
+					  },
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			</div>
+			<div>
+			  <label>Bonus for Not Out:</label>
+			  <input
+				type="number"
+				value={stage.scoring?.batting?.notOutBonus ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					batting: {
+					  ...updatedStages[stageIndex].scoring?.batting,
+					  notOutBonus: Number(e.target.value),
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			</div>
 
-      {/* Stages & Matches */}
-      <div style={{ marginTop: "20px" }}>
-        <h3>Stages & Matches</h3>
-  {tournament.stages?.map((stage, stageIndex) => (
-    <div key={stageIndex} style={{ marginBottom: "20px", padding: "10px", border: "1px solid #ddd" }}>
-      <input
-        type="text"
-        placeholder="Stage Name"
-        value={stage.name}
-        onChange={(e) => handleStageChange(stageIndex, "name", e.target.value)}
-      />
-      <button onClick={() => handleRemoveStage(stageIndex)}>Remove Stage</button>
+			<h4>Scoring Rules – Bowling</h4>
+			<div>
+			  <label>Points per Ball Bowled:</label>
+			  <input
+				type="number"
+				value={stage.scoring?.bowling?.perBallBowled ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					bowling: {
+					  ...updatedStages[stageIndex].scoring?.bowling,
+					  perBallBowled: Number(e.target.value),
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			</div>
+			<div>
+			  <label>Points per Dot Ball:</label>
+			  <input
+				type="number"
+				value={stage.scoring?.bowling?.perDotBall ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					bowling: {
+					  ...updatedStages[stageIndex].scoring?.bowling,
+					  perDotBall: Number(e.target.value),
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			</div>
+			<div>
+			  <label>Points per Run Conceded:</label>
+			  <input
+				type="number"
+				value={stage.scoring?.bowling?.perRunConceded ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					bowling: {
+					  ...updatedStages[stageIndex].scoring?.bowling,
+					  perRunConceded: Number(e.target.value),
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			</div>
+			<div>
+			  <label>Points per Wide:</label>
+			  <input
+				type="number"
+				value={stage.scoring?.bowling?.perWide ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					bowling: {
+					  ...updatedStages[stageIndex].scoring?.bowling,
+					  perWide: Number(e.target.value),
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			</div>
+			<div>
+			  <label>Points per No Ball:</label>
+			  <input
+				type="number"
+				value={stage.scoring?.bowling?.perNoBall ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					bowling: {
+					  ...updatedStages[stageIndex].scoring?.bowling,
+					  perNoBall: Number(e.target.value),
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			</div>
+			<div>
+			  <label>Points per Wicket:</label>
+			  <input
+				type="number"
+				value={stage.scoring?.bowling?.perWicket ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					bowling: {
+					  ...updatedStages[stageIndex].scoring?.bowling,
+					  perWicket: Number(e.target.value),
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			</div>
+			<div>
+			  <label>Bonus points for every wicket after </label>
+			  <input
+				type="number"
+				style={{ width: "60px" }}
+				value={stage.scoring?.bowling?.bonusAfterMinWickets?.min ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					bowling: {
+					  ...updatedStages[stageIndex].scoring?.bowling,
+					  bonusAfterMinWickets: {
+						...(updatedStages[stageIndex].scoring?.bowling?.bonusAfterMinWickets || {}),
+						min: Number(e.target.value),
+						points: stage.scoring?.bowling?.bonusAfterMinWickets?.points ?? 0,
+					  },
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			  <label> wickets: </label>
+			  <input
+				type="number"
+				style={{ width: "60px" }}
+				value={stage.scoring?.bowling?.bonusAfterMinWickets?.points ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					bowling: {
+					  ...updatedStages[stageIndex].scoring?.bowling,
+					  bonusAfterMinWickets: {
+						...(updatedStages[stageIndex].scoring?.bowling?.bonusAfterMinWickets || {}),
+						min: stage.scoring?.bowling?.bonusAfterMinWickets?.min ?? 0,
+						points: Number(e.target.value),
+					  },
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			</div>
 
-		<label>Max Subs:</label>
-		<input
-		  type="number"
-		  value={stage.subsAllowed}
-		  onChange={(e) => handleStageChange(stageIndex, "subsAllowed", Number(e.target.value))}
-	  />
+			<h4>Scoring Rules – Fielding</h4>
+			<div>
+			  <label>Points per Catch:</label>
+			  <input
+				type="number"
+				value={stage.scoring?.fielding?.perCatch ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					fielding: {
+					  ...updatedStages[stageIndex].scoring?.fielding,
+					  perCatch: Number(e.target.value),
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			</div>
+			<div>
+			  <label>Points per Run Out:</label>
+			  <input
+				type="number"
+				value={stage.scoring?.fielding?.perRunout ?? 0}
+				onChange={(e) => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].scoring = {
+					...updatedStages[stageIndex].scoring,
+					fielding: {
+					  ...updatedStages[stageIndex].scoring?.fielding,
+					  perRunout: Number(e.target.value),
+					},
+				  };
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  />
+			</div>
 
-      <h4>Matches</h4>
-      {stage.matches?.map((match, matchIndex) => (
-        <div key={matchIndex} style={{ marginBottom: "10px", padding: "5px", border: "1px solid #ccc" }}>
-          <label>Match {matchIndex + 1}</label>
-
-          <div>
-            <label>Team 1:</label>
-				<select
-				  value={match.team1}
-				  onChange={(e) => handleMatchChange(stageIndex, matchIndex, "team1", e.target.value)}
+			  {/* Stage Teams & Squads */}
+			  <h4>Stage Teams</h4>
+			  {stage.teams?.map((team, teamIndex) => (
+				<div
+				  key={teamIndex}
+				  style={{ marginBottom: "10px", padding: "5px", border: "1px solid #aaa" }}
 				>
-				  <option value="TBD">TBD</option>
-				  {tournament.teams?.map((team, index) => (
-					<option key={index} value={team.teamName}>
-					  {team.teamName}
-					</option>
+				  <input
+					type="text"
+					placeholder="Team Name"
+					value={team.name}
+					onChange={(e) => {
+					  const updatedStages = [...tournament.stages];
+					  updatedStages[stageIndex].teams[teamIndex].name = e.target.value;
+					  setTournament({ ...tournament, stages: updatedStages });
+					}}
+				  />
+				  <button
+					onClick={() => {
+					  const updatedStages = [...tournament.stages];
+					  updatedStages[stageIndex].teams.splice(teamIndex, 1);
+					  setTournament({ ...tournament, stages: updatedStages });
+					}}
+				  >
+					Remove Team
+				  </button>
+
+				  <h5>Players</h5>
+				  {team.players?.map((player, playerIndex) => (
+					<div key={playerIndex}>
+					  <input
+						type="text"
+						placeholder="Player Name"
+						value={player.playerName}
+						onChange={(e) => {
+						  const updatedStages = [...tournament.stages];
+						  updatedStages[stageIndex].teams[teamIndex].players[playerIndex].playerName =
+							e.target.value;
+						  setTournament({ ...tournament, stages: updatedStages });
+						}}
+					  />
+					  <select
+						value={player.role}
+						onChange={(e) => {
+						  const updatedStages = [...tournament.stages];
+						  updatedStages[stageIndex].teams[teamIndex].players[playerIndex].role =
+							e.target.value;
+						  setTournament({ ...tournament, stages: updatedStages });
+						}}
+					  >
+						<option value="Batsman">Batsman</option>
+						<option value="Bowler">Bowler</option>
+						<option value="All Rounder">All Rounder</option>
+					  </select>
+					  <input
+						type="number"
+						placeholder="Value"
+						value={player.value}
+						onChange={(e) => {
+						  const updatedStages = [...tournament.stages];
+						  updatedStages[stageIndex].teams[teamIndex].players[playerIndex].value =
+							Number(e.target.value);
+						  setTournament({ ...tournament, stages: updatedStages });
+						}}
+					  />
+					  <button
+						onClick={() => {
+						  const updatedStages = [...tournament.stages];
+						  updatedStages[stageIndex].teams[teamIndex].players.splice(playerIndex, 1);
+						  setTournament({ ...tournament, stages: updatedStages });
+						}}
+					  >
+						Remove Player
+					  </button>
+					</div>
 				  ))}
-				</select>
-          </div>
+				  <button
+					onClick={() => {
+					  const updatedStages = [...tournament.stages];
+					  updatedStages[stageIndex].teams[teamIndex].players.push({
+						playerName: "",
+						role: "",
+						value: 100,
+					  });
+					  setTournament({ ...tournament, stages: updatedStages });
+					}}
+				  >
+					Add Player
+				  </button>
+				  <button onClick={() => document.getElementById(`csv-stage-${stageIndex}-${teamIndex}`).click()}>
+					  Import CSV
+					</button>
+					<input
+					  id={`csv-stage-${stageIndex}-${teamIndex}`}
+					  type="file"
+					  accept=".csv"
+					  style={{ display: "none" }}
+					  onChange={(e) => handleImportCSVForStageTeam(e, stageIndex, teamIndex)}
+					/>
 
-          <div>
-            <label>Team 2:</label>
-				<select
-				  value={match.team2}
-				  onChange={(e) => handleMatchChange(stageIndex, matchIndex, "team2", e.target.value)}
-				>
-				  <option value="TBD">TBD</option>
-				  {tournament.teams?.map((team, index) => (
-					<option key={index} value={team.teamName}>
-					  {team.teamName}
-					</option>
-				  ))}
-				</select>
-          </div>
+				  
+				</div>
+			  ))}
+			  <button
+				onClick={() => {
+				  const updatedStages = [...tournament.stages];
+				  updatedStages[stageIndex].teams = [
+					...(updatedStages[stageIndex].teams || []),
+					{ name: "", players: [] },
+				  ];
+				  setTournament({ ...tournament, stages: updatedStages });
+				}}
+			  >
+				Add Team
+			  </button>
 
-          <div>
-            <label>Match Date:</label>
-            <input
-              type="date"
-              value={match.date}
-              onChange={(e) => handleMatchChange(stageIndex, matchIndex, "date", e.target.value)}
-            />
-          </div>
+				{/* Matches */}
+				<h4>Matches</h4>
+				{stage.matches?.map((match, matchIndex) => (
+				  <div
+					key={matchIndex}
+					style={{ marginBottom: "10px", padding: "5px", border: "1px solid #ccc" }}
+				  >
+					<label>Match {matchIndex + 1}</label>
 
-          <div>
-            <label>Match Time:</label>
-            <input
-              type="time"
-              value={match.time}
-              onChange={(e) => handleMatchChange(stageIndex, matchIndex, "time", e.target.value)}
-            />
-          </div>
+					<div>
+					  <label>Team 1:</label>
+					  <select
+						value={match.team1}
+						onChange={(e) => handleMatchChange(stageIndex, matchIndex, "team1", e.target.value)}
+					  >
+						<option value="TBD">TBD</option>
+						{stage.teams?.map((team, index) => (
+						  <option key={index} value={team.name}>
+							{team.name}
+						  </option>
+						))}
+					  </select>
+					</div>
 
-          <div>
-            <label>Sub Cutoff:</label>
-            <input
-              type="datetime-local"
-              value={match.cutoff}
-              onChange={(e) => handleMatchChange(stageIndex, matchIndex, "cutoff", e.target.value)}
-            />
-          </div>
+					<div>
+					  <label>Team 2:</label>
+					  <select
+						value={match.team2}
+						onChange={(e) => handleMatchChange(stageIndex, matchIndex, "team2", e.target.value)}
+					  >
+						<option value="TBD">TBD</option>
+						{stage.teams?.map((team, index) => (
+						  <option key={index} value={team.name}>
+							{team.name}
+						  </option>
+						))}
+					  </select>
+					</div>
 
-          <button onClick={() => handleRemoveMatch(stageIndex, matchIndex)}>Remove Match</button>
-        </div>
-      ))}
+					<div>
+					  <label>Match Date & Time:</label>
+					  <input
+						type="datetime-local"
+						value={formatForInput(match.matchDate)}
+						onChange={(e) =>
+						  handleMatchChange(stageIndex, matchIndex, "matchDate", new Date(e.target.value))
+						}
+					  />
+					</div>
 
-      <button onClick={() => handleAddMatch(stageIndex)}>Add Match</button>
-    </div>
-  ))}
+					<div>
+					  <label>Sub Cutoff:</label>
+					  <input
+						type="datetime-local"
+						value={formatForInput(match.cutoffDate)}
+						onChange={(e) =>
+						  handleMatchChange(stageIndex, matchIndex, "cutoffDate", new Date(e.target.value))
+						}
+					  />
+					</div>
 
-  <button onClick={handleAddStage}>Add Stage</button>
-</div>
+					<button onClick={() => handleRemoveMatch(stageIndex, matchIndex)}>Remove Match</button>
+				  </div>
+				))}
+				<button onClick={() => handleAddMatch(stageIndex)}>Add Match</button>
+			</div>
+		  ))}
+		  <button onClick={handleAddStage}>Add Stage</button>
+		</div>
 
       <button onClick={handleSave}>Save</button>
       <button onClick={() => navigate("/")}>Back to Dashboard</button>
