@@ -124,18 +124,12 @@ const HomePage = () => {
 				  >
 					<span>{tournament.name}</span>
 					<div className="flex space-x-2">
-					  <button
-						onClick={() =>
-						  navigate(
-							hasJoined
-							  ? `/tournament/${tournament.id}/team`
-							  : `/tournament/${tournament.id}`
-						  )
-						}
-						className="bg-indigo-500 text-white px-3 py-1 rounded"
-					  >
-						{hasJoined ? "View / Update Team" : "Join"}
-					  </button>
+						<button
+						  onClick={() => navigate(`/tournament/${tournament.id}`)}
+						  className="bg-indigo-500 text-white px-3 py-1 rounded"
+						>
+						  {hasJoined ? "View / Update Team" : "Join"}
+						</button>
 					  {isAdmin && (
 						<button
 						  onClick={() => navigate(`/edit-tournament/${tournament.id}`)}

@@ -1,87 +1,52 @@
-import React, { useState, useEffect } from "react";
-import { db, getTournaments } from "../firebase"; // Firebase functions
-import { collection, addDoc, deleteDoc, doc } from "firebase/firestore";
+import React, { useState } from "react";
+import { db } from "../firebase";
+import { collection, addDoc } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 
 const CreateTournament = () => {
-  const [tournamentName, setTournamentName] = useState(""); // Input for tournament name
-  const [maxBudget, setMaxBudget] = useState(1000000000); // Default budget
-  const [tournaments, setTournaments] = useState([]); // List of existing tournaments
   const navigate = useNavigate();
+  const [name, setName] = useState("");
 
-  /**
-   * Fetches all tournaments from Firestore and updates state.
-   */
-  useEffect(() => {
-    const fetchTournaments = async () => {
-      const tournamentList = await getTournaments();
-      setTournaments(tournamentList);
-    };
-    fetchTournaments();
-  }, []);
-
-  /**
-   * Handles form submission and saves the tournament to Firestore.
-   * @param {Event} e - Form submission event.
-   */
-  const handleCreateTournament = async (e) => {
-    e.preventDefault();
-    if (!tournamentName.trim()) {
-      console.log("Tournament name is required.");
+  const handleCreate = async () => {
+    if (!name) {
+      alert("Tournament name required");
       return;
     }
-    try {
-      await addDoc(collection(db, "tournaments"), {
-        name: tournamentName,
-        type: "classic", // Default tournament type
-        active: false, // Default state
-        stages: [], // Initialize with an empty stages array
-      });
-      setTournamentName("");
-      setMaxBudget(1100);
-      console.log("Tournament created successfully.");
-      const updatedTournaments = await getTournaments();
-      setTournaments(updatedTournaments);
-    } catch (error) {
-      console.error("Error creating tournament:", error);
-    }
-  };
 
-  /**
-   * Handles deleting a tournament.
-   * @param {string} id - The ID of the tournament to delete.
-   */
-  const handleDeleteTournament = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this tournament?")) return;
     try {
-      await deleteDoc(doc(db, "tournaments", id));
-      const updatedTournaments = await getTournaments();
-      setTournaments(updatedTournaments);
-      console.log("Tournament deleted successfully.");
-    } catch (error) {
-      console.error("Error deleting tournament:", error);
+      const tournamentRef = await addDoc(collection(db, "tournaments"), {
+        name: name,
+		active: false
+      });
+
+      console.log("✅ Tournament created:", tournamentRef.id);
+      navigate(`/edit-tournament/${tournamentRef.id}`); // go straight to edit
+    } catch (err) {
+      console.error("❌ Error creating tournament:", err);
+      alert("Failed to create tournament: " + err.message);
     }
   };
 
   return (
-    <div className="create-tournament-container">
-      <h2>Create a New Tournament</h2>
-      <form onSubmit={handleCreateTournament}>
-        <label>Tournament Name:</label>
-        <input type="text" value={tournamentName} onChange={(e) => setTournamentName(e.target.value)} required />
-        <button type="submit">Create Tournament</button>
-      </form>
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-4">Create Tournament</h1>
 
-      <h3>Existing Tournaments</h3>
-      {tournaments.map(tournament => (
-        <div key={tournament.id}>
-          {tournament.name} 
-          <button onClick={() => navigate(`/edit-tournament/${tournament.id}`)}>Edit</button> {/* Edit Button */}
-          <button onClick={() => handleDeleteTournament(tournament.id)}>Delete</button>
-        </div>
-      ))}
+      <div className="mb-4">
+        <label className="block mb-1">Tournament Name</label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="border px-2 py-1 rounded w-full"
+        />
+      </div>
 
-      <button onClick={() => navigate("/")}>Back to Dashboard</button>
+      <button
+        onClick={handleCreate}
+        className="bg-green-500 text-white px-4 py-2 rounded"
+      >
+        Create Tournament
+      </button>
     </div>
   );
 };

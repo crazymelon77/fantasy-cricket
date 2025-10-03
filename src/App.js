@@ -6,6 +6,8 @@ import CreateTournament from "./components/CreateTournament";
 import EditTournament from "./components/EditTournament"; 
 import JoinTournament from "./components/JoinTournament";// Import the new page
 import "./styles.css";
+import MigratePlayers from "./components/MigratePlayers";
+
 
 function App() {
   return (
@@ -15,8 +17,10 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/create-tournament" element={<CreateTournament />} />
-          <Route path="/edit-tournament/:tournamentId" element={<EditTournament />} /> {/* New Route */}
+          <Route path="/edit-tournament/:tournamentId" element={<EditTournament />} />
 		  <Route path="/tournament/:id" element={<JoinTournament />} />
+		  <Route path="/migrate" element={<MigratePlayers />} />
+
         </Routes>
       </div>
     </Router>

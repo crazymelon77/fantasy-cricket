@@ -1,185 +1,499 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { db } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { db, auth } from "../firebase";
+import { query, orderBy } from "firebase/firestore";
 
-const JoinTournament = () => 
-{
-	const { id } = useParams(); // tournament id from route
-	const navigate = useNavigate();
-	const [tournament, setTournament] = useState(null);
-	const [loading, setLoading] = useState(true);
+import {
+  doc,
+  getDoc,
+  setDoc,
+  collection,
+  getDocs
+} from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 
-	const [selectedPlayers, setSelectedPlayers] = useState([]);
-	const [budgetLeft, setBudgetLeft] = useState(tournament?.maxBudget || 0);
+const JoinTournament = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
 
-	const togglePlayer = (player) => 
-	{
-		const exists = selectedPlayers.find((p) => p.playerName === player.playerName);
+  const [tournament, setTournament] = useState(null);
+  const [stages, setStages] = useState([]);
+  const [teamsByStage, setTeamsByStage] = useState({});
+  const [playersByTeam, setPlayersByTeam] = useState({});
+  const [loading, setLoading] = useState(true);
 
-		if (exists) 
-		{
-			// remove player
-			setSelectedPlayers(selectedPlayers.filter((p) => p.playerName !== player.playerName));
-			setBudgetLeft(budgetLeft + player.value);
-		} 
-		else 
-		{
-			// add player if budget allows
-			if (budgetLeft < player.value) 
-			{
-				alert("Not enough points left!");
-				return;
-			}
-			setSelectedPlayers([...selectedPlayers, player]);
-			setBudgetLeft(budgetLeft - player.value);
-		}
-	};
+  const [user, setUser] = useState(null);
+  const [joined, setJoined] = useState(false);
+  const [selectedPlayers, setSelectedPlayers] = useState({});
+  const [budgetLeftByStage, setBudgetLeftByStage] = useState({});
+  const [expandedStage, setExpandedStage] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ field: null, dir: "asc" });
 
+  const handleSort = (field) => {
+    setSortConfig((prev) => {
+      const newDir = prev.field === field && prev.dir === "asc" ? "desc" : "asc";
+      return { field, dir: newDir };
+    });
+  };
+  
 
-	useEffect(() => {
-		const fetchTournament = async () => {
-			try {
-				const ref = doc(db, "tournaments", id);
-				const snap = await getDoc(ref);
-				if (!snap.exists()) {
-					alert("Tournament not found");
-					navigate("/");
-					return;
-				}
-				setTournament({ id: snap.id, ...snap.data() });
-			} catch (err) {
-				console.error("Error fetching tournament:", err);
-			} finally {
-				setLoading(false);
-			}
-		};
-		fetchTournament();
-	}, [id, navigate]);
+  // track auth
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => setUser(u));
+    return () => unsub();
+  }, []);
 
-	useEffect(() => {
-		if (tournament?.maxBudget) {
-		setBudgetLeft(tournament.maxBudget);
-		}
-	}, [tournament]);
+  // fetch tournament + subcollections
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const tourRef = doc(db, "tournaments", id);
+        const tourSnap = await getDoc(tourRef);
+        if (!tourSnap.exists()) {
+          alert("Tournament not found");
+          navigate("/");
+          return;
+        }
+        setTournament({ id: tourSnap.id, ...tourSnap.data() });
 
+		// fetch stages
+		const stageSnap = await getDocs(
+		  query(collection(tourRef, "stages"), orderBy("order", "asc"))
+		);
+		const stageList = stageSnap.docs.map((s) => ({ id: s.id, ...s.data() }));
+		setStages(stageList);
 
+        const teamsData = {};
+        const playersData = {};
 
-	if (loading) return <div className="p-4">Loading...</div>;
-	if (!tournament) return null;
+        for (const stage of stageList) {
+          const teamSnap = await getDocs(collection(tourRef, "stages", stage.id, "teams"));
+          const teamList = teamSnap.docs.map((t) => ({ id: t.id, ...t.data() }));
+          teamsData[stage.id] = teamList;
 
-	return (
+          for (const team of teamList) {
+            const playerSnap = await getDocs(
+              collection(tourRef, "stages", stage.id, "teams", team.id, "players")
+            );
+            playersData[team.id] = playerSnap.docs.map((p) => ({
+              id: p.id,
+              ...p.data(),
+              team: team.name
+            }));
+          }
+        }
+        setTeamsByStage(teamsData);
+        setPlayersByTeam(playersData);
+      } catch (err) {
+        console.error("Error fetching tournament:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [id, navigate]);
+
+  // check join status
+  useEffect(() => {
+    if (!user) return;
+    const checkJoined = async () => {
+      const userRef = doc(db, "user_teams", user.uid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        if (data[id]?.joined) setJoined(true);
+        if (data[id]?.stages) setSelectedPlayers(data[id].stages);
+        if (data[id]?.budgets) setBudgetLeftByStage(data[id].budgets);
+      }
+    };
+    checkJoined();
+  }, [user, id]);
+
+  // join tournament
+  const handleJoin = async () => {
+    if (!user) {
+      alert("You must be signed in to join");
+      return;
+    }
+    try {
+      const userRef = doc(db, "user_teams", user.uid);
+      await setDoc(userRef, { [id]: { joined: true, stages: {}, budgets: {} } }, { merge: true });
+      setJoined(true);
+    } catch (err) {
+      console.error("Error joining tournament:", err);
+    }
+  };
+
+  // leave tournament
+  const handleLeave = async () => {
+    if (!user) return;
+    if (!window.confirm("Leaving will remove your team. Are you sure?")) return;
+
+    try {
+      const userRef = doc(db, "user_teams", user.uid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        delete data[id];
+        await setDoc(userRef, data);
+      }
+      setJoined(false);
+      setSelectedPlayers({});
+      setBudgetLeftByStage({});
+    } catch (err) {
+      console.error("Error leaving tournament:", err);
+    }
+  };
+
+  // toggle player
+  const togglePlayer = (stageId, player) => {
+    if (!joined) return;
+    const stagePlayers = selectedPlayers[stageId] || [];
+    const exists = stagePlayers.some((p) => p.playerId === player.id);
+
+    if (exists) {
+      setSelectedPlayers({
+        ...selectedPlayers,
+        [stageId]: stagePlayers.filter((p) => p.playerId !== player.id)
+      });
+    } else {
+      setSelectedPlayers({
+        ...selectedPlayers,
+        [stageId]: [...stagePlayers, { playerId: player.id, teamId: player.team }]
+      });
+    }
+  };
+
+  // recompute budgets
+  useEffect(() => {
+    if (!stages.length) return;
+    setBudgetLeftByStage((prev) => {
+      const next = { ...prev };
+      stages.forEach((stage) => {
+        const total = Number(stage.budget || 0);
+        const picked = selectedPlayers[stage.id] || [];
+        let spent = 0;
+
+        picked.forEach((sel) => {
+          const match = Object.values(playersByTeam)
+            .flat()
+            .find((p) => p.id === sel.playerId);
+          if (match) spent += Number(match.value || 0);
+        });
+
+        next[stage.id] = Math.max(0, total - spent);
+      });
+      return next;
+    });
+  }, [stages, selectedPlayers, playersByTeam]);
+
+  // save team
+  const handleSaveTeam = async (stageId) => {
+    if (!user) return;
+  
+    const stage = stages.find((s) => s.id === stageId);
+    const stageSelections = selectedPlayers[stageId] || [];
+    const total = Number(stage.budget || 0);
+    const remaining = Number(budgetLeftByStage[stageId] ?? total);
+  
+    // --- validations ---
+    const batsmen = stageSelections
+      .map((sel) => resolvePlayer(sel.playerId))
+      .filter((p) => p?.role === "Batsman").length;
+    const bowlers = stageSelections
+      .map((sel) => resolvePlayer(sel.playerId))
+      .filter((p) => p?.role === "Bowler").length;
+    const allRounders = stageSelections
+      .map((sel) => resolvePlayer(sel.playerId))
+      .filter((p) => p?.role === "All Rounder").length;
+  
+    const teamCounts = {};
+    stageSelections.forEach((sel) => {
+      const player = resolvePlayer(sel.playerId);
+      if (player) teamCounts[player.team] = (teamCounts[player.team] || 0) + 1;
+    });
+    const maxFromSameTeam = Math.max(0, ...Object.values(teamCounts));
+  
+    const roleComp = stage.roleComposition || {};
+    const violations = [];
+  
+    if (stageSelections.length !== 11) {
+      violations.push(`Team must have exactly 11 players (currently ${stageSelections.length})`);
+    }
+    if (batsmen > (roleComp.batsman || 0)) violations.push("Too many batsmen");
+    if (bowlers > (roleComp.bowler || 0)) violations.push("Too many bowlers");
+    if (allRounders > (roleComp.allRounder || 0)) violations.push("Too many all rounders");
+    if (maxFromSameTeam > (roleComp.sameTeamMax || 11)) violations.push("Too many from one team");
+    if (remaining < 0) violations.push("Over budget");
+  
+    if (violations.length > 0) {
+      alert(`Cannot save stage "${stage.name}". Fix violations: ${violations.join(", ")}`);
+      return;
+    }
+  
+    // --- save to Firestore ---
+    try {
+      const userRef = doc(db, "user_teams", user.uid);
+      await setDoc(
+        userRef,
+        {
+          [id]: {
+            joined: true,
+            stages: {
+              ...(selectedPlayers || {}),
+              [stageId]: stageSelections,
+            },
+            budgets: {
+              ...(budgetLeftByStage || {}),
+              [stageId]: remaining,
+            },
+          },
+        },
+        { merge: true }
+      );
+      alert(`Team for stage "${stage.name}" saved!`);
+    } catch (err) {
+      console.error("Error saving team:", err);
+    }
+  };
+  
+  const resolvePlayer = (playerId) => {
+    return Object.values(playersByTeam).flat().find((p) => p.id === playerId);
+  };
+
+  if (loading) return <div className="p-4">Loading...</div>;
+  if (!tournament) return null;
+
+  return (
     <div className="p-6 overflow-y-auto" style={{ maxHeight: "100vh" }}>
-      <h1 className="text-2xl font-bold mb-2">{tournament.name}</h1>
-      <p className="mb-4">Budget: {tournament.maxBudget}</p>
-	  
-		<p className="mb-4 font-semibold">Budget left: {budgetLeft} points</p>
-
-		<h2 className="text-lg font-bold mb-2">Selected Players</h2>
-		{selectedPlayers.length === 0 ? (
-			<p className="mb-6">No players selected yet.</p>
-		) : (
-			<ul className="list-disc ml-5 mb-6">
-			{selectedPlayers.map((p, i) => (
-				<li key={i}>
-				{p.playerName} — {p.role} — {p.value} points
-			  </li>
-			))
-		}
-		  </ul>
-		)
-	}
-
-	  
-
-		{/* Teams & Players */}
-		<h2 className="text-xl font-bold mb-2">Teams & Players</h2>
-		{tournament.teams?.map((team, idx) => (
-		  <div key={idx} className="mb-6 border p-2 rounded">
-			<h3 className="font-semibold mb-2">{team.name || `Team ${idx + 1}`}</h3>
-			<table
-			  className="w-full border-separate border border-gray-300"
-			  style={{ borderSpacing: "0" }}
-			>
-			  <thead className="bg-gray-100">
-				<tr>
-				  <th className="border border-gray-300 px-2 py-2 text-left">Player</th>
-				  <th className="border border-gray-300 px-2 py-2 text-left">Role</th>
-				  <th className="border border-gray-300 px-2 py-2 text-left">Points</th>
-				  <th className="border border-gray-300 px-2 py-1 text-left">Action</th>
-
-				</tr>
-			  </thead>
-			  <tbody>
-				  {team.players?.map((p, i) => {
-					const isSelected = selectedPlayers.some((sp) => sp.playerName === p.playerName);
-					return (
-					  <tr key={i} className="hover:bg-gray-50">
-						<td className="border border-gray-300 px-2 py-1">{p.playerName}</td>
-						<td className="border border-gray-300 px-2 py-1">{p.role}</td>
-						<td className="border border-gray-300 px-2 py-1">{p.value} points</td>
-						<td className="border border-gray-300 px-2 py-1">
-						  {isSelected ? (
-							<button
-							  onClick={() => togglePlayer(p)}
-							  className="bg-red-500 text-white px-2 py-1 rounded"
-							>
-							  Remove
-							</button>
-						  ) : (
-							<button
-							  onClick={() => togglePlayer(p)}
-							  className="bg-green-500 text-white px-2 py-1 rounded"
-							>
-							  Add
-							</button>
-						  )}
-						</td>
-					  </tr>
-					);
-				  })}
-			  </tbody>
-
-			</table>
-		  </div>
-		))}
-
-      {/* Stages */}
-      <h2 className="text-xl font-bold mb-2">Stages</h2>
-      {tournament.stages?.map((stage, idx) => (
-        <div key={idx} className="mb-4 border p-2 rounded">
-          <h3 className="font-semibold">
-            {stage.name} (Subs Allowed: {stage.subsAllowed})
-          </h3>
-          <ul className="list-disc ml-5">
-			{stage.matches?.map((m, i) => {
-			  const matchDate = m.matchDate?.toDate
-				? m.matchDate.toDate()
-				: new Date(m.matchDate);
-			  const cutoffDate = m.cutoffDate?.toDate
-				? m.cutoffDate.toDate()
-				: new Date(m.cutoff);
-
-			  const formatDate = (d) =>
-				d.toLocaleDateString("en-GB", {
-				  day: "2-digit",
-				  month: "short",
-				  year: "numeric"
-				}) +
-				" @ " +
-				d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-
-			  return (
-				<li key={i}>
-				  Match {i + 1}: {m.team1} vs {m.team2} – {formatDate(matchDate)}{" "}
-				  <span className="text-sm text-gray-600">
-					[Sub cutoff: {formatDate(cutoffDate)}]
-				  </span>
-				</li>
-			  );
-			})}          </ul>
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">{tournament.name}</h1>
+        <div className="flex gap-2">
+          {joined ? (
+            <button onClick={handleLeave} className="bg-red-500 text-white px-4 py-2 rounded">Leave</button>
+          ) : (
+            <button onClick={handleJoin} className="bg-green-500 text-white px-4 py-2 rounded">Join</button>
+          )}
+          <button onClick={() => navigate("/")} className="bg-gray-500 text-white px-4 py-2 rounded">Back to Home</button>
         </div>
-      ))}
+      </div>
+
+      {stages.map((stage) => {
+        const total = Number(stage.budget || 0);
+        const remaining = Number(budgetLeftByStage[stage.id] ?? total);
+        const stageSelections = selectedPlayers[stage.id] || [];
+        const isExpanded = expandedStage === stage.id;
+
+        // role counts
+        const batsmen = stageSelections
+          .map((sel) => resolvePlayer(sel.playerId))
+          .filter((p) => p?.role === "Batsman").length;
+        const bowlers = stageSelections
+          .map((sel) => resolvePlayer(sel.playerId))
+          .filter((p) => p?.role === "Bowler").length;
+        const allRounders = stageSelections
+          .map((sel) => resolvePlayer(sel.playerId))
+          .filter((p) => p?.role === "All Rounder").length;
+        const teamCounts = {};
+        stageSelections.forEach((sel) => {
+          const player = resolvePlayer(sel.playerId);
+          if (player) {
+            teamCounts[player.team] = (teamCounts[player.team] || 0) + 1;
+          }
+        });
+        const maxFromSameTeam = Math.max(0, ...Object.values(teamCounts));
+
+        const roleComp = stage.roleComposition || {};
+        const errors = [];
+        if (batsmen > (roleComp.batsman || 0)) errors.push("Too many batsmen");
+        if (bowlers > (roleComp.bowler || 0)) errors.push("Too many bowlers");
+        if (allRounders > (roleComp.allRounder || 0)) errors.push("Too many all rounders");
+        if (maxFromSameTeam > (roleComp.sameTeamMax || 11)) errors.push("Too many from one team");
+        if (remaining < 0) errors.push("Over budget");
+        if (stageSelections.length > 11) errors.push("Too many players");
+
+        return (
+          <div key={stage.id} className="mb-4 border rounded">
+            <div className="p-3 bg-gray-100">
+              <h2 className="text-xl font-bold">{stage.name}</h2>
+              <div className="mt-1 text-sm">
+                <p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
+                  Subs remaining: {stage.subsAllowed ?? 0} | Budget: {total - remaining}/{total}
+                  <br />
+                  Role Composition: {batsmen}/{roleComp.batsman ?? 0} Batsmen,{" "}
+                  {bowlers}/{roleComp.bowler ?? 0} Bowlers,{" "}
+                  {allRounders}/{roleComp.allRounder ?? 0} All Rounders,{" "}
+                  Max {roleComp.sameTeamMax ?? 0} from same team
+                  <br />
+                  {stageSelections.length}/11 Total Players
+                </p>
+              </div>
+              <div className="flex justify-between items-center mt-2">
+                <span className="text-sm text-gray-600">
+                  {stageSelections.length} picked | Budget left: {remaining}
+                </span>
+                <button
+                  onClick={() => setExpandedStage(isExpanded ? null : stage.id)}
+                  className="text-blue-600 underline text-sm"
+                >
+                  {isExpanded ? "Collapse" : "Expand"}
+                </button>
+              </div>
+            </div>
+
+            {isExpanded && (
+              <div className="p-3">
+                {/* Selected Players */}
+                <h3 className="font-semibold mb-2">Selected Players</h3>
+
+				
+				{errors.length > 0 && (
+				  <div className="text-red-600 font-semibold mb-2">
+					Violations: {errors.join(", ")}
+				  </div>
+				)}
+				
+			  	{/* 🔹 Save button directly after selected players */}
+				{joined && (
+				  <button
+					onClick={() => handleSaveTeam(stage.id)}
+					className="bg-blue-500 text-white px-4 py-2 rounded mb-4"
+				  >
+					Save Team
+				  </button>
+				)}
+
+                {stageSelections.length === 0 ? (
+                  <p className="text-sm text-gray-700">No players selected.</p>
+                ) : (
+                  <table className="w-full border-separate border border-gray-300 mb-4">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        <th className="border px-2 py-1">Name</th>
+                        <th className="border px-2 py-1">Role</th>
+                        <th className="border px-2 py-1">Team</th>
+                        <th className="border px-2 py-1">Points</th>
+                        <th className="border px-2 py-1">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stageSelections.map((sel, i) => {
+                        const player = resolvePlayer(sel.playerId);
+                        if (!player) return null;
+                        return (
+                          <tr key={i}>
+                            <td className="border px-2 py-1">{player.playerName}</td>
+                            <td className="border px-2 py-1">{player.role}</td>
+                            <td className="border px-2 py-1">{player.team}</td>
+                            <td className="border px-2 py-1">{player.value}</td>
+                            <td className="border px-2 py-1">
+                              <button
+                                onClick={() => togglePlayer(stage.id, player)}
+                                className="bg-red-500 text-white px-2 py-1 rounded"
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+                {/* Available Players */}
+                <h3 className="font-semibold mb-2">Available Players</h3>
+                <table className="w-full border-separate border border-gray-300">
+   				  <thead className="bg-gray-100">
+   				    <tr>
+   				    	<th
+   				    	className="border px-2 py-1 cursor-pointer"
+   				    	onClick={() => handleSort("playerName")}
+   				    	>
+   				    	Name{" "}
+   				    	{sortConfig.field === "playerName" && (
+   				    		<span>{sortConfig.dir === "asc" ? "▲" : "▼"}</span>
+   				    	)}
+   				    	</th>
+   				    	<th
+   				    	className="border px-2 py-1 cursor-pointer"
+   				    	onClick={() => handleSort("role")}
+   				    	>
+   				    	Role{" "}
+   				    	{sortConfig.field === "role" && (
+   				    		<span>{sortConfig.dir === "asc" ? "▲" : "▼"}</span>
+   				    	)}
+   				    	</th>
+   				    	<th
+   				    	className="border px-2 py-1 cursor-pointer"
+   				    	onClick={() => handleSort("team")}
+   				    	>
+   				    	Team{" "}
+   				    	{sortConfig.field === "team" && (
+   				    		<span>{sortConfig.dir === "asc" ? "▲" : "▼"}</span>
+   				    	)}
+   				    	</th>
+   				    	<th
+   				    	className="border px-2 py-1 cursor-pointer"
+   				    	onClick={() => handleSort("value")}
+   				    	>
+   				    	Points{" "}
+   				    	{sortConfig.field === "value" && (
+   				    		<span>{sortConfig.dir === "asc" ? "▲" : "▼"}</span>
+   				    	)}
+   				    	</th>
+   				    	<th className="border px-2 py-1">Action</th>
+   				    </tr>
+   				  </thead>
+				  <tbody>
+					{(teamsByStage[stage.id] || [])
+					  .flatMap((team) => playersByTeam[team.id] || [])
+					  .sort((a, b) => {
+						if (!sortConfig.field) return 0;
+						const { field, dir } = sortConfig;
+						let valA = a[field];
+						let valB = b[field];
+						if (typeof valA === "string") valA = valA.toLowerCase();
+						if (typeof valB === "string") valB = valB.toLowerCase();
+						if (valA < valB) return dir === "asc" ? -1 : 1;
+						if (valA > valB) return dir === "asc" ? 1 : -1;
+						return 0;
+					  })
+					  .map((p, i) => {
+						const isSelected = stageSelections.some((sel) => sel.playerId === p.id);
+						return (
+						  <tr key={i}>
+							<td className="border px-2 py-1">{p.playerName}</td>
+							<td className="border px-2 py-1">{p.role}</td>
+							<td className="border px-2 py-1">{p.team}</td>
+							<td className="border px-2 py-1">{p.value}</td>
+							<td className="border px-2 py-1">
+							  {isSelected ? (
+								<button
+								  onClick={() => togglePlayer(stage.id, p)}
+								  className="bg-red-500 text-white px-2 py-1 rounded"
+								>
+								  Remove
+								</button>
+							  ) : (
+								<button
+								  onClick={() => togglePlayer(stage.id, p)}
+								  className="bg-green-500 text-white px-2 py-1 rounded"
+								  disabled={!joined}
+								>
+								  Add
+								</button>
+							  )}
+							</td>
+						  </tr>
+						);
+					  })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
