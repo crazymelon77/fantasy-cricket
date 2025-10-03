@@ -35,7 +35,6 @@ const JoinTournament = () => {
       return { field, dir: newDir };
     });
   };
-  
 
   // track auth
   useEffect(() => {
@@ -261,6 +260,61 @@ const JoinTournament = () => {
     return Object.values(playersByTeam).flat().find((p) => p.id === playerId);
   };
 
+  const formatScoringSummary = (scoring = {}) => {
+    const parts = [];
+  
+    // --- Batting ---
+    const bat = scoring.batting || {};
+    const batting = [];
+    if (bat.perRun != null) batting.push(`${bat.perRun}/run`);
+    if (bat.perBallFaced != null) batting.push(`${bat.perBallFaced}/ball faced`);
+    if (bat.perFour != null) batting.push(`${bat.perFour}/four`);
+    if (bat.perSix != null) batting.push(`${bat.perSix}/six`);
+    if (bat.notOutBonus != null) batting.push(`${bat.notOutBonus} not out`);
+  
+    if (bat.bonusEveryXRuns?.points != null && bat.bonusEveryXRuns?.x != null) {
+      const pts = bat.bonusEveryXRuns.points;
+      const prefix = pts > 0 ? "+" : "";
+      batting.push(`${prefix}${pts} every ${bat.bonusEveryXRuns.x} runs`);
+    }
+  
+    if (batting.length) parts.push(`Batting: ${batting.join(", ")}`);
+  
+    // --- Bowling ---
+    const bowl = scoring.bowling || {};
+    const bowling = [];
+    if (bowl.perBallBowled != null) bowling.push(`${bowl.perBallBowled}/ball`);
+    if (bowl.perDotBall != null) bowling.push(`${bowl.perDotBall}/dot`);
+    if (bowl.perRunConceded != null) bowling.push(`${bowl.perRunConceded}/run conceded`);
+    if (bowl.perWide != null) bowling.push(`${bowl.perWide}/wide`);
+    if (bowl.perNoBall != null) bowling.push(`${bowl.perNoBall}/no ball`);
+    if (bowl.perWicket != null) bowling.push(`${bowl.perWicket}/wicket`);
+  
+    if (bowl.bonusAfterMinWickets?.points != null && bowl.bonusAfterMinWickets?.min != null) {
+      const pts = bowl.bonusAfterMinWickets.points;
+      const prefix = pts > 0 ? "+" : "";
+      bowling.push(`${prefix}${pts} after ${bowl.bonusAfterMinWickets.min} wickets`);
+    }
+  
+    if (bowling.length) parts.push(`Bowling: ${bowling.join(", ")}`);
+  
+    // --- Fielding ---
+    const field = scoring.fielding || {};
+    const fielding = [];
+    if (field.perCatch != null) fielding.push(`${field.perCatch}/catch`);
+    if (field.perRunout != null) fielding.push(`${field.perRunout}/run out`);
+    if (fielding.length) parts.push(`Fielding: ${fielding.join(", ")}`);
+  
+    // --- General ---
+    const gen = scoring.general || {};
+    const general = [];
+    if (gen.perWin != null) general.push(`${gen.perWin}/win`);
+    if (gen.perSelection != null) general.push(`${gen.perSelection}/selection`);
+    if (general.length) parts.push(`Other: ${general.join(", ")}`);
+  
+    return parts;
+  };
+
   if (loading) return <div className="p-4">Loading...</div>;
   if (!tournament) return null;
 
@@ -316,17 +370,31 @@ const JoinTournament = () => {
           <div key={stage.id} className="mb-4 border rounded">
             <div className="p-3 bg-gray-100">
               <h2 className="text-xl font-bold">{stage.name}</h2>
+		  
               <div className="mt-1 text-sm">
-                <p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
-                  Subs remaining: {stage.subsAllowed ?? 0} | Budget: {total - remaining}/{total}
-                  <br />
-                  Role Composition: {batsmen}/{roleComp.batsman ?? 0} Batsmen,{" "}
-                  {bowlers}/{roleComp.bowler ?? 0} Bowlers,{" "}
-                  {allRounders}/{roleComp.allRounder ?? 0} All Rounders,{" "}
-                  Max {roleComp.sameTeamMax ?? 0} from same team
-                  <br />
-                  {stageSelections.length}/11 Total Players
-                </p>
+			  
+				<p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
+				  Subs remaining: {stage.subsAllowed ?? 0} | Budget: {total - remaining}/{total}
+				</p>
+
+				{/* Scoring summary */}
+				{console.log("Scoring for", stage.name, stage.scoring)}
+
+				<div className="text-sm text-gray-700 mt-1">
+				  {formatScoringSummary(stage.scoring).map((line, idx) => (
+					<div key={idx}>{line}</div>
+				  ))}
+				</div>
+
+				<p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
+				  Role Composition: {batsmen}/{roleComp.batsman ?? 0} Batsmen,{" "}
+				  {bowlers}/{roleComp.bowler ?? 0} Bowlers,{" "}
+				  {allRounders}/{roleComp.allRounder ?? 0} All Rounders,{" "}
+				  Max {roleComp.sameTeamMax ?? 0} from same team
+				  <br />
+				  {stageSelections.length}/11 Total Players
+				</p> 
+				
               </div>
               <div className="flex justify-between items-center mt-2">
                 <span className="text-sm text-gray-600">

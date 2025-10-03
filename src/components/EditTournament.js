@@ -124,22 +124,25 @@ const saveTournament = async () => {
     setStages(updated);
   };
 
+  const handleScoringPairChange = (stageIndex, basePath, key, value) => {
+    const updated = [...stages];
+    if (!updated[stageIndex].scoring) updated[stageIndex].scoring = {};
+  
+    // ensure the full container path exists, including the pair object
+    const tgt = ensure(updated[stageIndex].scoring, [...basePath, key]);
+    tgt[key] = value === "" ? "" : Number(value);
+  
+    setStages(updated);
+  };
+  
   const handleScoringChange = (stageIndex, path, value) => {
     const updated = [...stages];
     if (!updated[stageIndex].scoring) updated[stageIndex].scoring = {};
     const tgt = ensure(updated[stageIndex].scoring, path);
-    tgt[path[path.length - 1]] = Number(value);
+    tgt[path[path.length - 1]] = value === "" ? "" : Number(value); // ✅
     setStages(updated);
   };
-
-  const handleScoringPairChange = (stageIndex, basePath, key, value) => {
-    const updated = [...stages];
-    if (!updated[stageIndex].scoring) updated[stageIndex].scoring = {};
-    const tgt = ensure(updated[stageIndex].scoring, basePath);
-    tgt[key] = Number(value);
-    setStages(updated);
-  };
-
+  
 const addStage = async () => {
   const nextOrder = (stages?.length || 0) + 1; // auto-assign order
 
