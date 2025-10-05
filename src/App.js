@@ -6,7 +6,7 @@ import CreateTournament from "./components/CreateTournament";
 import EditTournament from "./components/EditTournament"; 
 import JoinTournament from "./components/JoinTournament";// Import the new page
 import "./styles.css";
-import MigratePlayers from "./components/MigratePlayers";
+import EnterMatchResults from "./components/EnterMatchResults";
 
 
 function App() {
@@ -19,7 +19,8 @@ function App() {
           <Route path="/create-tournament" element={<CreateTournament />} />
           <Route path="/edit-tournament/:tournamentId" element={<EditTournament />} />
 		  <Route path="/tournament/:id" element={<JoinTournament />} />
-		  <Route path="/migrate" element={<MigratePlayers />} />
+		  <Route path="/tournament/:tId/stage/:sId/match/:mId/results" element={<EnterMatchResults />} />
+
 
         </Routes>
       </div>

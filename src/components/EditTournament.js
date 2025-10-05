@@ -10,6 +10,8 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { useNavigate, useParams } from "react-router-dom";
+import { Link } from "react-router-dom";
+
 
 const EditTournament = () => {
   const { tournamentId } = useParams();
@@ -20,6 +22,8 @@ const EditTournament = () => {
   const [teamsByStage, setTeamsByStage] = useState({});
   const [playersByTeam, setPlayersByTeam] = useState({});
   const [loading, setLoading] = useState(true);
+  const [team1, setTeam1] = useState("TBD");
+  const [team2, setTeam2] = useState("TBD");
 
   // ---------- Save Tournament ----------
 const saveTournament = async () => {
@@ -153,7 +157,12 @@ const addStage = async () => {
     budget: 600,
     roleComposition: { batsman: 0, bowler: 0, allRounder: 0, sameTeamMax: 0 },
     scoring: {
-      general: { perWin: 0, perSelection: 0 },
+      general: { 
+		perWin: 0, 
+		perSelection: 0, 
+		manOfTheMatch: 0,
+		awayTeamBonus: 0
+	  },
       batting: {
         perRun: 0,
         perBallFaced: 0,
@@ -169,6 +178,7 @@ const addStage = async () => {
         perWide: 0,
         perNoBall: 0,
         perWicket: 0,
+		perMaidenOver: 0,
         bonusAfterMinWickets: { min: 0, points: 0 },
       },
       fielding: { perCatch: 0, perRunout: 0 },
@@ -205,14 +215,62 @@ const addStage = async () => {
   };
 
   // ---------- Matches ----------
-  const addMatch = (stageIndex) => {
-    const updated = [...stages];
-    updated[stageIndex].matches = [
-      ...(updated[stageIndex].matches || []),
-      { team1: "TBD", team2: "TBD", matchDate: null, cutoffDate: null },
-    ];
-    setStages(updated);
-  };
+const addMatch = async (stageId) => {
+  try {
+    const newMatch = {
+      team1: "TBD",
+      team2: "TBD",
+      matchDate: null,
+      cutoffDate: null,
+    };
+
+    const matchRef = await addDoc(
+      collection(db, "tournaments", tournamentId, "stages", stageId, "matches"),
+      newMatch
+    );
+
+    // optional: update state so UI shows it immediately
+    setStages((prev) =>
+      prev.map((s) =>
+        s.id === stageId
+          ? { ...s, matches: [...(s.matches || []), { id: matchRef.id, ...newMatch }] }
+          : s
+      )
+    );
+  } catch (err) {
+    console.error("Error adding match:", err);
+    alert("Failed to add match");
+  }
+};
+
+const saveMatch = async (stageId, match) => {
+  try {
+    if (!match.id) {
+      alert("Match has no ID yet, save the stage first.");
+      return;
+    }
+    const matchRef = doc(
+      db,
+      "tournaments",
+      tournamentId,
+      "stages",
+      stageId,
+      "matches",
+      match.id
+    );
+    await updateDoc(matchRef, {
+      team1: match.team1,
+      team2: match.team2,
+      matchDate: match.matchDate,
+      cutoffDate: match.cutoffDate,
+    });
+    alert("Match saved!");
+  } catch (err) {
+    console.error("Error saving match:", err);
+    alert("Failed to save match");
+  }
+};
+
 
   const removeMatch = (stageIndex, matchIndex) => {
     const updated = [...stages];
@@ -525,6 +583,27 @@ const addStage = async () => {
                 }
               />
             </div>
+			<div>
+			  <label>Man of the Match Bonus:</label>
+			  <input
+				type="number"
+				value={stage.scoring?.general?.manOfTheMatch ?? 0}
+				onChange={(e) =>
+				  handleScoringChange(sIdx, ["general", "manOfTheMatch"], e.target.value)
+				}
+			  />
+			</div>
+
+			<div>
+			  <label>Away Team Bonus:</label>
+			  <input
+				type="number"
+				value={stage.scoring?.general?.awayTeamBonus ?? 0}
+				onChange={(e) =>
+				  handleScoringChange(sIdx, ["general", "awayTeamBonus"], e.target.value)
+				}
+			  />
+			</div>
 
             {/* Scoring Rules – Batting */}
             <h4>Scoring Rules – Batting</h4>
@@ -620,6 +699,16 @@ const addStage = async () => {
                 }
               />
             </div>
+			<div>
+			  <label>Points per Maiden Over:</label>
+			  <input
+				type="number"
+				value={stage.scoring?.bowling?.perMaidenOver ?? 0}
+				onChange={(e) =>
+				  handleScoringChange(sIdx, ["bowling", "perMaidenOver"], e.target.value)
+				}
+			  />
+			</div>
             <div>
               <label>Points per Run Conceded:</label>
               <input
@@ -719,26 +808,33 @@ const addStage = async () => {
                 key={mIdx}
                 style={{ marginBottom: "10px", padding: "5px", border: "1px solid #ccc" }}
               >
-                <label>Match {mIdx + 1}</label>
+                <label>Match {mIdx + 1} </label>
 
-                <div>
-                  <label>Team 1:</label>
-                  <input
-                    type="text"
-                    value={match.team1}
-                    onChange={(e) => changeMatch(sIdx, mIdx, "team1", e.target.value)}
-                  />
-                </div>
+			<div>
+				<label>Team 1:</label>
+				<select
+				  value={match.team1 || "TBD"}
+				  onChange={(e) => changeMatch(sIdx, mIdx, "team1", e.target.value)}
+				>
+				  <option value="TBD">TBD</option>
+				  {(teamsByStage[stage.id] || []).map((team) => (
+					<option key={team.id} value={team.id}>{team.name}</option>
+				  ))}
+				</select>
 
-                <div>
-                  <label>Team 2:</label>
-                  <input
-                    type="text"
-                    value={match.team2}
-                    onChange={(e) => changeMatch(sIdx, mIdx, "team2", e.target.value)}
-                  />
-                </div>
+				<label>Team 2:</label>
+				<select
+				  value={match.team2 || "TBD"}
+				  onChange={(e) => changeMatch(sIdx, mIdx, "team2", e.target.value)}
+				>
+				  <option value="TBD">TBD</option>
+				  {(teamsByStage[stage.id] || []).map((team) => (
+					<option key={team.id} value={team.id}>{team.name}</option>
+				  ))}
+				</select>
 
+			 
+			</div>
                 <div>
                   <label>Match Date & Time:</label>
                   <input
@@ -757,11 +853,22 @@ const addStage = async () => {
                   />
                 </div>
 
-                <button onClick={() => removeMatch(sIdx, mIdx)}>Remove Match</button>
+				<button onClick={() => removeMatch(sIdx, mIdx)}>Remove Match</button>
+				<button onClick={() => saveMatch(stage.id, match)}>Save Match</button>
+
+				
+				{/* 🔹 New Scorecard button */}
+				<Link
+				  to={`/tournament/${tournamentId}/stage/${stage.id}/match/${match.id}/results`}
+				>
+				  <button>Scorecard</button>
+				</Link>
+
               </div>
             ))}
 
-            <button onClick={() => addMatch(sIdx)}>Add Match</button>
+             <button onClick={() => addMatch(stage.id, team1, team2)}>Add Match</button>
+
 
             {/* Teams & Players */}
             <h4>Stage Teams</h4>
