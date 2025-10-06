@@ -23,26 +23,41 @@ export async function computeStageScores(tId, sId, mId) {
     const pid = d.id;
     const s = d.data() || {};
 
-    // compat for scorers that read runsConceded
+    // Compatibility for alternate naming
     const sCompat = { ...s, runsConceded: s.runsConceded ?? s.runsGiven ?? 0 };
 
-    // base points from your scorer
-    let points = scorePlayer(scoring, sCompat, {
+    // Compute category-wise scores using the updated scorePlayer()
+    const points = scorePlayer(scoring, sCompat, {
       played: !!s.played,
       won: !!s.won,
     });
 
-    // new tweaks
-    points += (scoring.batting?.notOutBonus || 0) * (s.notOuts || 0);
-    if (s.mom) points += scoring.general?.manOfTheMatch || 0;
-    if (s.awayTeam) points += scoring.general?.awayTeamBonus || 0;
-	
-	points += (scoring.bowling?.perMaidenOver || 0) * (s.maidenOvers || 0);
+    // Apply your additional adjustments
+    if (s.notOuts) {
+      points.batting += (scoring.batting?.notOutBonus || 0) * s.notOuts;
+      points.total += (scoring.batting?.notOutBonus || 0) * s.notOuts;
+    }
+    if (s.mom) {
+      points.general += scoring.general?.manOfTheMatch || 0;
+      points.total += scoring.general?.manOfTheMatch || 0;
+    }
+    if (s.awayTeam) {
+      points.general += scoring.general?.awayTeamBonus || 0;
+      points.total += scoring.general?.awayTeamBonus || 0;
+    }
+    if (s.maidenOvers) {
+      points.bowling += (scoring.bowling?.perMaidenOver || 0) * s.maidenOvers;
+      points.total += (scoring.bowling?.perMaidenOver || 0) * s.maidenOvers;
+    }
 
+    // Save results to Firestore
     writes.push(
       setDoc(
         doc(statsCol, pid),
-        { points, computedAt: Date.now() }, // 👈 saved alongside raw stats
+        {
+          points,
+          computedAt: Date.now(),
+        },
         { merge: true }
       )
     );

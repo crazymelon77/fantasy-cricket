@@ -48,10 +48,20 @@ export function scoreGeneral(gen, played, won) {
 
 export function scorePlayer(stageScoring, s, meta = { played: false, won: false }) {
   const { batting, bowling, fielding, general } = stageScoring || {};
-  return (
-    scoreBatting(batting, s) +
-    scoreBowling(bowling, s) +
-    scoreFielding(fielding, s) +
-    scoreGeneral(general, meta.played, meta.won)
-  );
+
+  const battingPts = scoreBatting(batting, s);
+  const bowlingPts = scoreBowling(bowling, s);
+  const fieldingPts = scoreFielding(fielding, s);
+  const generalPts = scoreGeneral(general, meta.played, meta.won);
+
+  const total = battingPts + bowlingPts + fieldingPts + generalPts;
+
+  return {
+    total,
+    batting: battingPts,
+    bowling: bowlingPts,
+    fielding: fieldingPts,
+    general: generalPts,
+  };
 }
+
