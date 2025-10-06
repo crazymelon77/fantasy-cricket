@@ -258,7 +258,125 @@ function EnterMatchResults() {
         return { key, direction: "desc" };
       });
     };
-    
+    	
+	// 🔹 Export CSV with name + team from maps
+const exportCSV = () => {
+  const headers = [
+    "playerId","name","team",
+    "mom","awayTeam",
+    "runs","ballsFaced","fours","sixes","zeros","notOuts",
+    "ballsBowled","maidenOvers","runsGiven","dotBalls","wides","noBalls","wickets",
+    "catches","runouts","won","played"
+  ];
+
+  const rows = [headers];
+
+  players.forEach((p) => {
+    rows.push([
+      p.id,
+      playerNames[p.id] || p.id,
+      playerTeams[p.id] || "",
+      stats[p.id]?.mom ?? false,
+      stats[p.id]?.awayTeam ?? false,
+      stats[p.id]?.runs ?? 0,
+      stats[p.id]?.ballsFaced ?? 0,
+      stats[p.id]?.fours ?? 0,
+      stats[p.id]?.sixes ?? 0,
+      stats[p.id]?.zeros ?? 0,
+      stats[p.id]?.notOuts ?? 0,
+      stats[p.id]?.ballsBowled ?? 0,
+      stats[p.id]?.maidenOvers ?? 0,
+      stats[p.id]?.runsGiven ?? 0,
+      stats[p.id]?.dotBalls ?? 0,
+      stats[p.id]?.wides ?? 0,
+      stats[p.id]?.noBalls ?? 0,
+      stats[p.id]?.wickets ?? 0,
+      stats[p.id]?.catches ?? 0,
+      stats[p.id]?.runouts ?? 0,
+      stats[p.id]?.won ?? false,
+      stats[p.id]?.played ?? false,
+    ]);
+  });
+
+  const csvContent = rows.map((r) => r.join(",")).join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `match_${mId}_results.csv`);
+  link.click();
+};
+
+// 🔹 Import CSV (from our own export format)
+const handleImportCSV = async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const text = await file.text();
+  const lines = text.replace(/\r/g, "").split("\n").filter((l) => l.trim().length);
+  if (lines.length < 2) {
+    alert("CSV is empty");
+    e.target.value = "";
+    return;
+  }
+
+  const updates = {};
+  const IDX = {
+    PID: 0, NAME: 1, TEAM: 2,
+    MOM: 3, AWAY: 4,
+    RUNS: 5, BF: 6, FOURS: 7, SIXES: 8, ZEROS: 9, NOTOUTS: 10,
+    BALLS_BOWLED: 11, MAIDENS: 12, RUNS_GIVEN: 13, DOTBALLS: 14, WIDES: 15, NOBALLS: 16,
+    WICKETS: 17, CATCHES: 18, RUNOUTS: 19, WON: 20, PLAYED: 21,
+  };
+
+  const toNum = (v, d = 0) => {
+    const n = Number(String(v).trim());
+    return Number.isFinite(n) ? n : d;
+  };
+  const toBool = (v) => /^(true|1|yes|y)$/i.test(String(v).trim());
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(",");
+    if (cols.length < 22) continue;
+    const pid = cols[IDX.PID]?.trim();
+    if (!pid) continue;
+
+    updates[pid] = {
+      mom: toBool(cols[IDX.MOM]),
+      awayTeam: toBool(cols[IDX.AWAY]),
+      runs: toNum(cols[IDX.RUNS]),
+      ballsFaced: toNum(cols[IDX.BF]),
+      fours: toNum(cols[IDX.FOURS]),
+      sixes: toNum(cols[IDX.SIXES]),
+      zeros: toNum(cols[IDX.ZEROS]),
+      notOuts: toNum(cols[IDX.NOTOUTS]),
+      ballsBowled: toNum(cols[IDX.BALLS_BOWLED]),
+      maidenOvers: toNum(cols[IDX.MAIDENS]),
+      runsGiven: toNum(cols[IDX.RUNS_GIVEN]),
+      dotBalls: toNum(cols[IDX.DOTBALLS]),
+      wides: toNum(cols[IDX.WIDES]),
+      noBalls: toNum(cols[IDX.NOBALLS]),
+      wickets: toNum(cols[IDX.WICKETS]),
+      catches: toNum(cols[IDX.CATCHES]),
+      runouts: toNum(cols[IDX.RUNOUTS]),
+      won: toBool(cols[IDX.WON]),
+      played: toBool(cols[IDX.PLAYED]),
+    };
+  }
+
+  const statsRef = collection(db, "tournaments", tId, "stages", sId, "matches", mId, "stats");
+  await Promise.all(
+    Object.entries(updates).map(([pid, payload]) =>
+      setDoc(doc(statsRef, pid), payload, { merge: true })
+    )
+  );
+
+  setStats((prev) => ({ ...prev, ...updates }));
+  alert(`Imported ${Object.keys(updates).length} rows`);
+  e.target.value = "";
+};
+
+
   
   return (
     <div style={{ padding: "20px", maxHeight: "90vh", overflowY: "auto" }}>
@@ -398,11 +516,24 @@ function EnterMatchResults() {
         );
       })}
 
-      <div style={{ marginTop: "20px" }}>
-        <button onClick={saveResults}>Save Results</button>
-        <button onClick={runCompute}>Compute Points</button>
-        <button onClick={resetStats}>Reset Players</button>
-      </div>
+<div style={{ marginTop: "20px" }}>
+  <button onClick={saveResults}>Save Results</button>
+  <button onClick={runCompute}>Compute Points</button>
+  <button onClick={resetStats}>Reset Players</button>
+  <button onClick={exportCSV}>Export CSV</button>
+
+  {/* CSV import */}
+  <input
+    id="importCsvInput"
+    type="file"
+    accept=".csv"
+    style={{ display: "none" }}
+    onChange={handleImportCSV}
+  />
+  <button onClick={() => document.getElementById("importCsvInput").click()}>
+    Import CSV
+  </button>
+</div>
     </div>
   );
 }

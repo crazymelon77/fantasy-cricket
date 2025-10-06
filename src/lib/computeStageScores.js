@@ -19,20 +19,18 @@ export async function computeStageScores(tId, sId, mId) {
 
   // 3) Compute + persist points on each player's stats doc
   const writes = [];
+  const playerPoints = {}; // store player totals for later user calculations
+
   statsSnap.forEach((d) => {
     const pid = d.id;
     const s = d.data() || {};
-
-    // Compatibility for alternate naming
     const sCompat = { ...s, runsConceded: s.runsConceded ?? s.runsGiven ?? 0 };
 
-    // Compute category-wise scores using the updated scorePlayer()
     const points = scorePlayer(scoring, sCompat, {
       played: !!s.played,
       won: !!s.won,
     });
 
-    // Apply your additional adjustments
     if (s.notOuts) {
       points.batting += (scoring.batting?.notOutBonus || 0) * s.notOuts;
       points.total += (scoring.batting?.notOutBonus || 0) * s.notOuts;
@@ -50,7 +48,9 @@ export async function computeStageScores(tId, sId, mId) {
       points.total += (scoring.bowling?.perMaidenOver || 0) * s.maidenOvers;
     }
 
-    // Save results to Firestore
+    // save player totals
+    playerPoints[pid] = points.total;
+
     writes.push(
       setDoc(
         doc(statsCol, pid),
@@ -64,4 +64,5 @@ export async function computeStageScores(tId, sId, mId) {
   });
 
   await Promise.all(writes);
+  console.log(`✅ Computed player points for stage ${sId}, match ${mId}`);
 }
