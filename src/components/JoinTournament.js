@@ -32,6 +32,11 @@ const JoinTournament = () => {
   const [stageResults, setStageResults] = useState({});
   const [expandedMatches, setExpandedMatches] = useState({});
   
+  const [savedPlayers, setSavedPlayers] = useState({});     // last saved squads per stage
+  const [subsUsedLive, setSubsUsedLive] = useState({});     // live (unsaved) subs per stage
+  const [subsUsedFromDB, setSubsUsedFromDB] = useState({}); // committed subs per stage
+  
+  
   const [searchParams] = useSearchParams();
   useEffect(() => {
     const stageToExpand = searchParams.get("stage");
@@ -124,14 +129,41 @@ const JoinTournament = () => {
       const userRef = doc(db, "user_teams", user.uid);
       const userSnap = await getDoc(userRef);
       if (userSnap.exists()) {
-        const data = userSnap.data();
-        if (data[id]?.joined) setJoined(true);
-        if (data[id]?.stages) setSelectedPlayers(data[id].stages);
-        if (data[id]?.budgets) setBudgetLeftByStage(data[id].budgets);
+        const data = userSnap.data() || {};
+        const rec = data[id] || {};
+  
+        if (rec.joined) setJoined(true);
+        if (rec.stages) {
+          setSelectedPlayers(rec.stages);
+          setSavedPlayers(rec.stages);             // 🔹 keep a baseline to compare against
+        } else {
+          setSelectedPlayers({});
+          setSavedPlayers({});
+        }
+  
+        if (rec.budgets) setBudgetLeftByStage(rec.budgets);
+        setSubsUsedFromDB(rec.subsUsed || {});     // 🔹 committed subs from DB (per stage)
+      } else {
+        setJoined(false);
+        setSelectedPlayers({});
+        setSavedPlayers({});
+        setBudgetLeftByStage({});
+        setSubsUsedFromDB({});
       }
     };
     checkJoined();
   }, [user, id]);
+ 
+ //remove later//
+ useEffect(() => {
+  console.log("✅ savedPlayers:", savedPlayers);
+  console.log("✅ subsUsedFromDB:", subsUsedFromDB);
+}, [savedPlayers, subsUsedFromDB]);
+
+useEffect(() => {
+  console.log("🔄 subsUsedLive:", subsUsedLive);
+}, [subsUsedLive]);
+//remove later//
 
   // join tournament
   const handleJoin = async () => {
@@ -181,21 +213,36 @@ const JoinTournament = () => {
   // toggle player
   const togglePlayer = (stageId, player) => {
     if (!joined) return;
+  
     const stagePlayers = selectedPlayers[stageId] || [];
     const exists = stagePlayers.some((p) => p.playerId === player.id);
-
-    if (exists) {
-      setSelectedPlayers({
-        ...selectedPlayers,
-        [stageId]: stagePlayers.filter((p) => p.playerId !== player.id)
-      });
+  
+    // build new selection
+    const newSelection = exists
+      ? stagePlayers.filter((p) => p.playerId !== player.id)
+      : [...stagePlayers, { playerId: player.id, teamId: player.team }];
+  
+    // update selection state
+    const updated = { ...selectedPlayers, [stageId]: newSelection };
+    setSelectedPlayers(updated);
+  
+    // --- 🔹 Live sub logic ---
+    const oldSquad = savedPlayers[stageId] || [];
+    const oldIds = oldSquad.map((p) => p.playerId);
+    const newIds = newSelection.map((p) => p.playerId);
+  
+    if (oldIds.length === 11 && newIds.length === 11) {
+      const removed = oldIds.filter((p) => !newIds.includes(p));
+      const added = newIds.filter((p) => !oldIds.includes(p));
+      const changes = Math.max(removed.length, added.length);
+  
+      setSubsUsedLive((prev) => ({ ...prev, [stageId]: changes }));
     } else {
-      setSelectedPlayers({
-        ...selectedPlayers,
-        [stageId]: [...stagePlayers, { playerId: player.id, teamId: player.team }]
-      });
+      // if not full team yet, reset subs count for this stage
+      setSubsUsedLive((prev) => ({ ...prev, [stageId]: 0 }));
     }
   };
+  
 
   // recompute budgets
   useEffect(() => {
@@ -258,6 +305,27 @@ const JoinTournament = () => {
     if (allRounders > (roleComp.allRounder || 0)) violations.push("Too many all rounders");
     if (maxFromSameTeam > (roleComp.sameTeamMax || 11)) violations.push("Too many from one team");
     if (remaining < 0) violations.push("Over budget");
+	
+	 // 🔹 Substitution validation (only if both squads are full)
+	 const userRef = doc(db, "user_teams", user.uid);
+	 const userSnap = await getDoc(userRef);
+	 const prevData = userSnap.exists() ? userSnap.data() : {};
+	 const prevSquad = prevData[id]?.stages?.[stageId] || [];
+	 let subsUsed = 0;
+	 
+	 if (prevSquad.length === 11 && stageSelections.length === 11) {
+	   const oldIds = prevSquad.map((p) => p.playerId);
+	   const newIds = stageSelections.map((p) => p.playerId);
+	   const removed = oldIds.filter((p) => !newIds.includes(p));
+	   const added = newIds.filter((p) => !oldIds.includes(p));
+	   const changes = Math.max(removed.length, added.length);
+	   subsUsed = (prevData[id]?.subsUsed?.[stageId] ?? 0) + changes;
+	 
+	   if (subsUsed > stage.subsAllowed) {
+		 violations.push(`Too many subs: (${subsUsed}/${stage.subsAllowed})`);
+	   }
+	 }
+	
   
     if (violations.length > 0) {
       alert(`Cannot save stage "${stage.name}". Fix violations: ${violations.join(", ")}`);
@@ -266,25 +334,32 @@ const JoinTournament = () => {
   
     // --- save to Firestore ---
     try {
-      const userRef = doc(db, "user_teams", user.uid);
-      await setDoc(
-        userRef,
-        {
-          [id]: {
-            joined: true,
-            stages: {
-              ...(selectedPlayers || {}),
-              [stageId]: stageSelections,
-            },
-            budgets: {
-              ...(budgetLeftByStage || {}),
-              [stageId]: remaining,
-            },
-          },
-        },
-        { merge: true }
-      );
+	  await setDoc(
+	  userRef,
+	  {
+		  [id]: {
+		  joined: true,
+		  stages: {
+			  ...(selectedPlayers || {}),
+			  [stageId]: stageSelections,
+		  },
+		  budgets: {
+			  ...(budgetLeftByStage || {}),
+			  [stageId]: remaining,
+		  },
+		  subsUsed: {
+			  ...(prevData[id]?.subsUsed || {}),
+			  [stageId]: subsUsed,
+		  },
+		  },
+	  },
+	  { merge: true }
+	 );
       alert(`Team for stage "${stage.name}" saved!`);
+	  setSavedPlayers((prev) => ({ ...prev, [stageId]: stageSelections }));
+	  setSubsUsedFromDB((prev) => ({ ...prev, [stageId]: subsUsed }));
+	  setSubsUsedLive((prev) => ({ ...prev, [stageId]: 0 }));
+
     } catch (err) {
       console.error("Error saving team:", err);
     }
@@ -469,12 +544,9 @@ const JoinTournament = () => {
 
 				<p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
 				  <b>Role Composition:</b> <br />
-				  {batsmen}/{roleComp.batsman ?? 0} Batsmen,{" "}
-				  {bowlers}/{roleComp.bowler ?? 0} Bowlers,{" "}
-				  {allRounders}/{roleComp.allRounder ?? 0} All Rounders,{" "}
-				  Max {roleComp.sameTeamMax ?? 0} from same team
+				  {batsmen} Batsmen | {bowlers} Bowlers | {allRounders} All Rounders | Max {" "}{roleComp.sameTeamMax ?? 0} from same team
 				  <br />
-				  {stageSelections.length}/11 Total Players
+				  11 Total Players
 				</p> 
 				
               </div>
@@ -507,7 +579,7 @@ const JoinTournament = () => {
 					<h3 className="font-semibold mb-2">Match Results</h3>
 					
 					<p className="text-lg font-semibold text-gray-800 mt-3 mb-2">
-					  Stage Points: <b>{totalStagePoints ? `${totalStagePoints}` : "Pending"}</b>
+					  <b>Stage Points: {totalStagePoints ? `${totalStagePoints}` : "Pending"}</b>
 					</p>
 					
 					{stageResults[stage.id].map((match, idx) => {
@@ -605,8 +677,8 @@ const JoinTournament = () => {
                 {/* Selected Players */}
                 <h3 className="font-semibold mb-2">
 				  {user?.displayName
-					? `${user.displayName.split(" ")[0]}'s current team for ${stage.name}`
-					: `Your current team for ${stage.name}`}
+					? `${user.displayName.split(" ")[0]}'s team for ${stage.name}`
+					: `Your team for ${stage.name}`}
 				</h3>
 
 				{errors.length > 0 && (
@@ -616,18 +688,21 @@ const JoinTournament = () => {
 				)}
 				
 			  	{/* 🔹 Save button directly after selected players */}
-				<p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
-				  Subs remaining: {stage.subsAllowed ?? 0} | Budget: {total - remaining}/{total}
-				</p>
+				
 				
 				<p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
 				  {batsmen}/{roleComp.batsman ?? 0} Batsmen,{" "}
 				  {bowlers}/{roleComp.bowler ?? 0} Bowlers,{" "}
 				  {allRounders}/{roleComp.allRounder ?? 0} All Rounders,{" "}
-				  Max {roleComp.sameTeamMax ?? 0} from same team
+				  {maxFromSameTeam}/{roleComp.sameTeamMax ?? 0} same team
 				  <br />
 				  {stageSelections.length}/11 Total Players
 				</p> 
+				
+				<p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
+				  <b>Subs used: {(subsUsedFromDB[stage.id] ?? 0) + (subsUsedLive[stage.id] ?? 0)}/{stage.subsAllowed ?? 0}
+					  {" "} | Budget: {total - remaining}/{total}</b>
+				</p>
 				
 				{joined && (
 				  <button
