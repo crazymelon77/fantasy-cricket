@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { db } from "../firebase";
+import { auth, db } from "../firebase";
 import {
   collection, getDocs, doc, getDoc, query, orderBy
 } from "firebase/firestore";
@@ -157,7 +157,7 @@ const Leaderboard = () => {
   if (!tournament) return null;
 
   return (
-    <div className="p-4 overflow-x-auto">
+    <div className="p-4 overflow-x-auto overflow-y-auto" style={{ maxHeight: "90vh" }}>
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">{tournament.name} — Leaderboard</h1>
         <div className="flex gap-2">
@@ -232,6 +232,14 @@ const Leaderboard = () => {
                         <div className="font-semibold mb-1">
                           Squad for <span className="underline">{s.name}</span> (Stage Total: {sum})
                         </div>
+						{r.uid === auth.currentUser?.uid && (
+							<button
+							  onClick={() => navigate(`/tournament/${tournamentId}?stage=${s.id}`)}
+							  className="bg-blue-600 text-white px-3 py-1 rounded text-sm"
+							>
+							  Modify Squad
+							</button>
+						 )}
                         {squadRows.length === 0 ? (
                           <div className="text-sm text-gray-600">No players selected for this stage.</div>
                         ) : (

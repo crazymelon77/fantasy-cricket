@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { db, auth } from "../firebase";
 import { query, orderBy } from "firebase/firestore";
 
@@ -31,6 +31,12 @@ const JoinTournament = () => {
   
   const [stageResults, setStageResults] = useState({});
   const [expandedMatches, setExpandedMatches] = useState({});
+  
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const stageToExpand = searchParams.get("stage");
+    if (stageToExpand) setExpandedStage(stageToExpand);
+  }, [searchParams]);
 
   const toggleMatchDetails = (matchId) => {
     setExpandedMatches((prev) => ({
@@ -603,7 +609,6 @@ const JoinTournament = () => {
 					: `Your current team for ${stage.name}`}
 				</h3>
 
-				
 				{errors.length > 0 && (
 				  <div className="text-red-600 font-semibold mb-2">
 					Violations: {errors.join(", ")}
@@ -614,6 +619,16 @@ const JoinTournament = () => {
 				<p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
 				  Subs remaining: {stage.subsAllowed ?? 0} | Budget: {total - remaining}/{total}
 				</p>
+				
+				<p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
+				  {batsmen}/{roleComp.batsman ?? 0} Batsmen,{" "}
+				  {bowlers}/{roleComp.bowler ?? 0} Bowlers,{" "}
+				  {allRounders}/{roleComp.allRounder ?? 0} All Rounders,{" "}
+				  Max {roleComp.sameTeamMax ?? 0} from same team
+				  <br />
+				  {stageSelections.length}/11 Total Players
+				</p> 
+				
 				{joined && (
 				  <button
 					onClick={() => handleSaveTeam(stage.id)}

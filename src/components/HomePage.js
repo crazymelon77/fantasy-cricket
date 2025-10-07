@@ -123,30 +123,32 @@ const HomePage = () => {
 					className="p-2 border-b flex justify-between items-center"
 				  >
 					<span>{tournament.name}</span>
-					<div className="flex space-x-2">
-						<button
-						  onClick={() => navigate(`/tournament/${tournament.id}`)}
-						  className="bg-indigo-500 text-white px-3 py-1 rounded"
-						>
-						  {hasJoined ? "View / Update Team" : "Join"}
-						</button>
-					  {isAdmin && (
-					  <>
-						<button
-						  onClick={() => navigate(`/edit-tournament/${tournament.id}`)}
-						  className="bg-blue-500 text-white px-3 py-1 rounded"
-						>
-						  Edit
-						</button>
-						<button
-						  onClick={() => navigate(`/tournament/${tournament.id}/leaderboard`)}
-						  className="bg-gray-700 text-white px-3 py-1 rounded"
-						>
-						  Leaderboard
-						</button>
-						</>
-					  )}
-					</div>
+<div className="flex space-x-2">
+  <button
+    onClick={() => navigate(`/tournament/${tournament.id}`)}
+    className="bg-indigo-500 text-white px-3 py-1 rounded"
+  >
+    {hasJoined ? "View / Update Team" : "Join"}
+  </button>
+
+  {/* 🏆 Leaderboard — visible to everyone */}
+  <button
+    onClick={() => navigate(`/tournament/${tournament.id}/leaderboard`)}
+    className="bg-gray-700 text-white px-3 py-1 rounded"
+  >
+    Leaderboard
+  </button>
+
+  {/* 🧩 Edit — visible only to admins */}
+  {isAdmin && (
+    <button
+      onClick={() => navigate(`/edit-tournament/${tournament.id}`)}
+      className="bg-blue-500 text-white px-3 py-1 rounded"
+    >
+      Edit
+    </button>
+  )}
+</div>
 				  </div>
 				);
 			  })}
