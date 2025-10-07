@@ -4,7 +4,8 @@ import Auth from "./components/Auth";
 import HomePage from "./components/HomePage";
 import CreateTournament from "./components/CreateTournament"; 
 import EditTournament from "./components/EditTournament"; 
-import JoinTournament from "./components/JoinTournament";// Import the new page
+import JoinTournament from "./components/JoinTournament";
+import Leaderboard from "./components/Leaderboard";
 import "./styles.css";
 import EnterMatchResults from "./components/EnterMatchResults";
 
@@ -20,6 +21,8 @@ function App() {
           <Route path="/edit-tournament/:tournamentId" element={<EditTournament />} />
 		  <Route path="/tournament/:id" element={<JoinTournament />} />
 		  <Route path="/tournament/:tId/stage/:sId/match/:mId/results" element={<EnterMatchResults />} />
+		  <Route path="/tournament/:id/leaderboard" element={<Leaderboard />} />
+
 
 
         </Routes>

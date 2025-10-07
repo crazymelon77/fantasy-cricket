@@ -131,12 +131,20 @@ const HomePage = () => {
 						  {hasJoined ? "View / Update Team" : "Join"}
 						</button>
 					  {isAdmin && (
+					  <>
 						<button
 						  onClick={() => navigate(`/edit-tournament/${tournament.id}`)}
 						  className="bg-blue-500 text-white px-3 py-1 rounded"
 						>
 						  Edit
 						</button>
+						<button
+						  onClick={() => navigate(`/tournament/${tournament.id}/leaderboard`)}
+						  className="bg-gray-700 text-white px-3 py-1 rounded"
+						>
+						  Leaderboard
+						</button>
+						</>
 					  )}
 					</div>
 				  </div>

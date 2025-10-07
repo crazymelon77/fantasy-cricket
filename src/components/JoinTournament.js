@@ -38,7 +38,16 @@ const JoinTournament = () => {
       [matchId]: !prev[matchId],
     }));
   };
-
+  
+  // 🔹 Helper: compute total points earned by a player across all matches in this stage
+  const getPlayerTotalPoints = (stageId, playerId) => {
+    const matches = stageResults[stageId] || [];
+    return matches.reduce((sum, match) => {
+      const p = match.players.find(mp => mp.id === playerId);
+      return sum + (p?.points?.total ?? 0);
+    }, 0);
+  };
+  
   const handleSort = (field) => {
     setSortConfig((prev) => {
       const newDir = prev.field === field && prev.dir === "asc" ? "desc" : "asc";
@@ -126,7 +135,16 @@ const JoinTournament = () => {
     }
     try {
       const userRef = doc(db, "user_teams", user.uid);
-      await setDoc(userRef, { [id]: { joined: true, stages: {}, budgets: {} } }, { merge: true });
+	  await setDoc(
+		  userRef,
+		  {
+			displayName: auth.currentUser.displayName || "",
+			email: auth.currentUser.email || "",
+			[id]: { joined: true, stages: {}, budgets: {} },
+		  },
+		  { merge: true }
+		);
+
       setJoined(true);
     } catch (err) {
       console.error("Error joining tournament:", err);
@@ -337,8 +355,22 @@ const JoinTournament = () => {
     // --- General ---
     const gen = scoring.general || {};
     const general = [];
-    if (gen.perWin != null) general.push(`${gen.perWin}/win`);
-    if (gen.perSelection != null) general.push(`${gen.perSelection}/selection`);
+	if (gen.perWin != null) {
+      const prefix = gen.perWin > 0 ? "+" : "";
+      general.push(`${prefix}${gen.perWin} win bonus`);
+    }
+	if (gen.perSelection != null) {
+      const prefix = gen.perSelection > 0 ? "+" : "";
+      general.push(`${prefix}${gen.perSelection} selection bonus`);
+    }
+	if (gen.manOfTheMatch != null) {
+      const prefix = gen.manOfTheMatch > 0 ? "+" : "";
+      general.push(`${prefix}${gen.manOfTheMatch} for man of match`);
+    }
+	if (gen.awayTeamBonus != null) {
+      const prefix = gen.manOfTheMatch > 0 ? "+" : "";
+      general.push(`${prefix}${gen.awayTeamBonus} away bonus`);
+    }
     if (general.length) parts.push(`Other: ${general.join(", ")}`);
   
     return parts;
@@ -357,15 +389,28 @@ const JoinTournament = () => {
           ) : (
             <button onClick={handleJoin} className="bg-green-500 text-white px-4 py-2 rounded">Join</button>
           )}
+		  <button
+      onClick={() => navigate(`/tournament/${id}/leaderboard`)}
+      className="bg-gray-700 text-white px-4 py-2 rounded"
+    >
+      Leaderboard
+    </button>
           <button onClick={() => navigate("/")} className="bg-gray-500 text-white px-4 py-2 rounded">Back to Home</button>
         </div>
       </div>
 
       {stages.map((stage) => {
-		const totalStagePoints = stageResults[stage.id]?.reduce((sum, match) => {
-		  return sum + (match.players?.reduce((s, p) => s + (p.points?.total ?? 0), 0) || 0);
-		}, 0) || 0;
-		
+		const userTeam = selectedPlayers[stage.id] || [];
+		const totalStagePoints =
+		  stageResults[stage.id]?.reduce((sum, match) => {
+			// only include points for players in user's team
+			const matchPoints = userTeam.reduce((teamSum, sel) => {
+			  const p = match.players.find((mp) => mp.id === sel.playerId);
+			  return teamSum + (p?.points?.total ?? 0);
+			}, 0);
+			return sum + matchPoints;
+		  }, 0) || 0;
+				
         const total = Number(stage.budget || 0);
         const remaining = Number(budgetLeftByStage[stage.id] ?? total);
         const stageSelections = selectedPlayers[stage.id] || [];
@@ -408,6 +453,7 @@ const JoinTournament = () => {
 
 				{/* Scoring summary */}
 				{console.log("Scoring for", stage.name, stage.scoring)}
+				<b>Scoring Rules:</b> <br />
 
 				<div className="text-sm text-gray-700 mt-1">
 				  {formatScoringSummary(stage.scoring).map((line, idx) => (
@@ -416,7 +462,8 @@ const JoinTournament = () => {
 				</div>
 
 				<p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
-				  Role Composition: {batsmen}/{roleComp.batsman ?? 0} Batsmen,{" "}
+				  <b>Role Composition:</b> <br />
+				  {batsmen}/{roleComp.batsman ?? 0} Batsmen,{" "}
 				  {bowlers}/{roleComp.bowler ?? 0} Bowlers,{" "}
 				  {allRounders}/{roleComp.allRounder ?? 0} All Rounders,{" "}
 				  Max {roleComp.sameTeamMax ?? 0} from same team
@@ -585,7 +632,8 @@ const JoinTournament = () => {
                         <th className="border px-2 py-1">Name</th>
                         <th className="border px-2 py-1">Role</th>
                         <th className="border px-2 py-1">Team</th>
-                        <th className="border px-2 py-1">Points</th>
+                        <th className="border px-2 py-1">Cost</th>
+						<th className="border px-2 py-1">Points</th>
                         <th className="border px-2 py-1">Action</th>
                       </tr>
                     </thead>
@@ -599,6 +647,9 @@ const JoinTournament = () => {
                             <td className="border px-2 py-1">{player.role}</td>
                             <td className="border px-2 py-1">{player.team}</td>
                             <td className="border px-2 py-1">{player.value}</td>
+							<td className="border px-2 py-1 text-right">
+							  {getPlayerTotalPoints(stage.id, player.id)}
+							</td>
                             <td className="border px-2 py-1">
                               <button
                                 onClick={() => togglePlayer(stage.id, player)}
@@ -649,11 +700,20 @@ const JoinTournament = () => {
    				    	className="border px-2 py-1 cursor-pointer"
    				    	onClick={() => handleSort("value")}
    				    	>
-   				    	Points{" "}
+   				    	Cost{" "}
    				    	{sortConfig.field === "value" && (
    				    		<span>{sortConfig.dir === "asc" ? "▲" : "▼"}</span>
    				    	)}
    				    	</th>
+						<th
+					    className="border px-2 py-1 cursor-pointer"
+					    onClick={() => handleSort("pointsEarned")}
+						>
+					    Points {" "}
+					    {sortConfig.field === "pointsEarned" && (
+							<span>{sortConfig.dir === "asc" ? "▲" : "▼"}</span>
+					    )}
+						</th>
    				    	<th className="border px-2 py-1">Action</th>
    				    </tr>
    				  </thead>
@@ -661,15 +721,24 @@ const JoinTournament = () => {
 					{(teamsByStage[stage.id] || [])
 					  .flatMap((team) => playersByTeam[team.id] || [])
 					  .sort((a, b) => {
-						if (!sortConfig.field) return 0;
-						const { field, dir } = sortConfig;
-						let valA = a[field];
-						let valB = b[field];
-						if (typeof valA === "string") valA = valA.toLowerCase();
-						if (typeof valB === "string") valB = valB.toLowerCase();
-						if (valA < valB) return dir === "asc" ? -1 : 1;
-						if (valA > valB) return dir === "asc" ? 1 : -1;
-						return 0;
+					    if (!sortConfig.field) return 0;
+					    const { field, dir } = sortConfig;
+					    let valA, valB;
+					  
+					    if (field === "pointsEarned") {
+					  	valA = getPlayerTotalPoints(stage.id, a.id);
+					  	valB = getPlayerTotalPoints(stage.id, b.id);
+					    } else {
+					  	valA = a[field];
+					  	valB = b[field];
+					    }
+					  
+					    if (typeof valA === "string") valA = valA.toLowerCase();
+					    if (typeof valB === "string") valB = valB.toLowerCase();
+					  
+					    if (valA < valB) return dir === "asc" ? -1 : 1;
+					    if (valA > valB) return dir === "asc" ? 1 : -1;
+					    return 0;
 					  })
 					  .map((p, i) => {
 						const isSelected = stageSelections.some((sel) => sel.playerId === p.id);
@@ -679,6 +748,9 @@ const JoinTournament = () => {
 							<td className="border px-2 py-1">{p.role}</td>
 							<td className="border px-2 py-1">{p.team}</td>
 							<td className="border px-2 py-1">{p.value}</td>
+							<td className="border px-2 py-1 text-right">
+							  {getPlayerTotalPoints(stage.id, p.id)}
+							</td>
 							<td className="border px-2 py-1">
 							  {isSelected ? (
 								<button
