@@ -28,6 +28,16 @@ const JoinTournament = () => {
   const [budgetLeftByStage, setBudgetLeftByStage] = useState({});
   const [expandedStage, setExpandedStage] = useState(null);
   const [sortConfig, setSortConfig] = useState({ field: null, dir: "asc" });
+  
+  const [stageResults, setStageResults] = useState({});
+  const [expandedMatches, setExpandedMatches] = useState({});
+
+  const toggleMatchDetails = (matchId) => {
+    setExpandedMatches((prev) => ({
+      ...prev,
+      [matchId]: !prev[matchId],
+    }));
+  };
 
   const handleSort = (field) => {
     setSortConfig((prev) => {
@@ -259,6 +269,25 @@ const JoinTournament = () => {
   const resolvePlayer = (playerId) => {
     return Object.values(playersByTeam).flat().find((p) => p.id === playerId);
   };
+  
+  const fetchMatchResults = async (stageId) => {
+    const results = [];
+    const matchesRef = collection(db, "tournaments", id, "stages", stageId, "matches");
+    const matchesSnap = await getDocs(matchesRef);
+  
+    for (const m of matchesSnap.docs) {
+      const matchData = { id: m.id, ...m.data(), players: [] };
+  
+      const statsSnap = await getDocs(collection(matchesRef, m.id, "stats"));
+      statsSnap.forEach((s) => {
+        matchData.players.push({ id: s.id, ...s.data() });
+      });
+  
+      results.push(matchData);
+    }
+  
+    return results;
+  };
 
   const formatScoringSummary = (scoring = {}) => {
     const parts = [];
@@ -333,6 +362,10 @@ const JoinTournament = () => {
       </div>
 
       {stages.map((stage) => {
+		const totalStagePoints = stageResults[stage.id]?.reduce((sum, match) => {
+		  return sum + (match.players?.reduce((s, p) => s + (p.points?.total ?? 0), 0) || 0);
+		}, 0) || 0;
+		
         const total = Number(stage.budget || 0);
         const remaining = Number(budgetLeftByStage[stage.id] ?? total);
         const stageSelections = selectedPlayers[stage.id] || [];
@@ -372,10 +405,6 @@ const JoinTournament = () => {
               <h2 className="text-xl font-bold">{stage.name}</h2>
 		  
               <div className="mt-1 text-sm">
-			  
-				<p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
-				  Subs remaining: {stage.subsAllowed ?? 0} | Budget: {total - remaining}/{total}
-				</p>
 
 				{/* Scoring summary */}
 				{console.log("Scoring for", stage.name, stage.scoring)}
@@ -401,7 +430,15 @@ const JoinTournament = () => {
                   {stageSelections.length} picked | Budget left: {remaining}
                 </span>
                 <button
-                  onClick={() => setExpandedStage(isExpanded ? null : stage.id)}
+                   onClick={async () => {
+					if (isExpanded) {
+						setExpandedStage(null);
+					} else {
+						const matches = await fetchMatchResults(stage.id);
+						setStageResults((prev) => ({ ...prev, [stage.id]: matches }));
+						setExpandedStage(stage.id);
+					  }
+				   }}
                   className="text-blue-600 underline text-sm"
                 >
                   {isExpanded ? "Collapse" : "Expand"}
@@ -411,8 +448,113 @@ const JoinTournament = () => {
 
             {isExpanded && (
               <div className="p-3">
+			  {/* Match Results */}
+				{(stageResults[stage.id] || []).length > 0 && (
+				  <div className="mb-4">
+					<h3 className="font-semibold mb-2">Match Results</h3>
+					
+					<p className="text-lg font-semibold text-gray-800 mt-3 mb-2">
+					  Stage Points: <b>{totalStagePoints ? `${totalStagePoints}` : "Pending"}</b>
+					</p>
+					
+					{stageResults[stage.id].map((match, idx) => {
+					  const userTeam = selectedPlayers[stage.id] || [];
+					  let totalPoints = 0;
+
+					  const playerRows = userTeam.map((sel) => {
+						const p = match.players.find((mp) => mp.id === sel.playerId);
+						if (!p) return null;
+						const pts = p.points || {};
+						totalPoints += pts.total || 0;
+						return (
+						  <tr key={sel.playerId}>
+							<td className="border px-2 py-1">{resolvePlayer(sel.playerId)?.playerName}</td>
+							<td className="border px-2 py-1 text-right">{pts.batting ?? 0}</td>
+							<td className="border px-2 py-1 text-right">{pts.bowling ?? 0}</td>
+							<td className="border px-2 py-1 text-right">{pts.fielding ?? 0}</td>
+							<td className="border px-2 py-1 text-right">{pts.general ?? 0}</td>
+							<td className="border px-2 py-1 text-right font-semibold">{pts.total ?? 0}</td>
+						  </tr>
+						);
+					  });
+
+					  const team1Name =
+						teamsByStage[stage.id]?.find((t) => t.id === match.team1)?.name ||
+						match.team1 ||
+						"TBD";
+					  const team2Name =
+						teamsByStage[stage.id]?.find((t) => t.id === match.team2)?.name ||
+						match.team2 ||
+						"TBD";
+
+					  const matchTotal = match.players.some((p) => p.points)
+						? userTeam.reduce((sum, sel) => {
+							const p = match.players.find((mp) => mp.id === sel.playerId);
+							return sum + (p?.points?.total ?? 0);
+						  }, 0)
+						: null;
+
+					  return (
+						<div
+						  key={match.id}
+						  className="mb-3 border border-gray-300 rounded p-2 bg-gray-50"
+						>
+						  <div className="flex justify-between items-center">
+							
+							  Match {idx + 1}: {team1Name} vs {team2Name} {" "}
+							  <span className="text-sm text-gray-600 ml-1">
+								({matchTotal !== null ? `match total: ${matchTotal}` : "match total: Pending"}){" "}
+							  </span>
+							
+							<button
+							  onClick={() => toggleMatchDetails(match.id)}
+							  className="text-blue-600 underline text-sm"
+							>
+							  {expandedMatches[match.id] ? "Hide Details" : "Show Details"}
+							</button>
+						  </div>
+
+						  {expandedMatches[match.id] && (
+							<div className="mt-2">
+							  <table className="score-table text-sm border border-gray-300 rounded w-auto">
+								<thead className="bg-gray-100">
+								  <tr>
+									<th className="border px-2 py-1 text-left">Player</th>
+									<th className="border px-2 py-1 text-right">Bat</th>
+									<th className="border px-2 py-1 text-right">Bowl</th>
+									<th className="border px-2 py-1 text-right">Field</th>
+									<th className="border px-2 py-1 text-right">Gen</th>
+									<th className="border px-2 py-1 text-right">Total</th>
+								  </tr>
+								</thead>
+								<tbody>
+								  {playerRows.filter(Boolean).map((row, i) =>
+									React.cloneElement(row, { key: i })
+								  )}
+								</tbody>
+								<tfoot>
+								  <tr>
+									<td className="text-right font-semibold" colSpan="5">
+									  Match Total
+									</td>
+									<td className="text-right font-semibold">{totalPoints}</td>
+								  </tr>
+								</tfoot>
+							  </table>
+							</div>
+						  )}
+						</div>
+					  );
+					})}
+				  </div>
+				)}
+
                 {/* Selected Players */}
-                <h3 className="font-semibold mb-2">Selected Players</h3>
+                <h3 className="font-semibold mb-2">
+				  {user?.displayName
+					? `${user.displayName.split(" ")[0]}'s current team for ${stage.name}`
+					: `Your current team for ${stage.name}`}
+				</h3>
 
 				
 				{errors.length > 0 && (
@@ -422,6 +564,9 @@ const JoinTournament = () => {
 				)}
 				
 			  	{/* 🔹 Save button directly after selected players */}
+				<p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
+				  Subs remaining: {stage.subsAllowed ?? 0} | Budget: {total - remaining}/{total}
+				</p>
 				{joined && (
 				  <button
 					onClick={() => handleSaveTeam(stage.id)}
@@ -434,7 +579,7 @@ const JoinTournament = () => {
                 {stageSelections.length === 0 ? (
                   <p className="text-sm text-gray-700">No players selected.</p>
                 ) : (
-                  <table className="w-full border-separate border border-gray-300 mb-4">
+                  <table className="score-table text-sm mt-2">
                     <thead className="bg-gray-100">
                       <tr>
                         <th className="border px-2 py-1">Name</th>
@@ -470,7 +615,7 @@ const JoinTournament = () => {
                 )}
                 {/* Available Players */}
                 <h3 className="font-semibold mb-2">Available Players</h3>
-                <table className="w-full border-separate border border-gray-300">
+                <table className="score-table text-sm mt-2">
    				  <thead className="bg-gray-100">
    				    <tr>
    				    	<th

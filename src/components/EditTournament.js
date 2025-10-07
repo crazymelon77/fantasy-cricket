@@ -204,10 +204,19 @@ const addStage = async () => {
 
   const saveStage = async (stage) => {
     try {
-      const { id, ...payload } = stage;
+      const { id, matches, team1, team2, matchDate, cutoffDate, ...payload } = stage;
       const stageRef = doc(db, "tournaments", tournamentId, "stages", id);
       await updateDoc(stageRef, payload);
+	  
+	  if (Array.isArray(matches)) {
+		  for (const match of matches) {
+			  if (!match.id) continue;
+			  await saveMatch(id, match);
+		  }
+	  }  
+	  
       alert("Stage saved");
+	  
     } catch (err) {
       console.error("Error saving stage:", err);
       alert("Failed to save stage");
@@ -264,7 +273,7 @@ const saveMatch = async (stageId, match) => {
       matchDate: match.matchDate,
       cutoffDate: match.cutoffDate,
     });
-    alert("Match saved!");
+    
   } catch (err) {
     console.error("Error saving match:", err);
     alert("Failed to save match");
@@ -272,11 +281,36 @@ const saveMatch = async (stageId, match) => {
 };
 
 
-  const removeMatch = (stageIndex, matchIndex) => {
+const removeMatch = async (stageIndex, matchIndex) => {
+  try {
+    const stage = stages[stageIndex];
+    const match = stage.matches[matchIndex];
+    if (!match?.id) return;
+
+    // 1️⃣ Delete from Firestore
+    const matchRef = doc(
+      db,
+      "tournaments",
+      tournamentId,
+      "stages",
+      stage.id,
+      "matches",
+      match.id
+    );
+    await deleteDoc(matchRef);
+
+    // 2️⃣ Remove locally from state so UI updates immediately
     const updated = [...stages];
     updated[stageIndex].matches.splice(matchIndex, 1);
     setStages(updated);
-  };
+
+    alert("Match removed!");
+  } catch (err) {
+    console.error("Error removing match:", err);
+    alert("Failed to remove match");
+  }
+};
+
 
   const changeMatch = (stageIndex, matchIndex, field, value) => {
     const updated = [...stages];
