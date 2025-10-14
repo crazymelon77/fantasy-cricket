@@ -521,6 +521,7 @@ const JoinTournament = () => {
     const bowling = [];
     if (bowl.perBallBowled != null) bowling.push(`${bowl.perBallBowled}/ball`);
     if (bowl.perDotBall != null) bowling.push(`${bowl.perDotBall}/dot`);
+	if (bowl.perMaidenOver != null) bowling.push(`${bowl.perMaidenOver}/maiden`);
     if (bowl.perRunConceded != null) bowling.push(`${bowl.perRunConceded}/run conceded`);
     if (bowl.perWide != null) bowling.push(`${bowl.perWide}/wide`);
     if (bowl.perNoBall != null) bowling.push(`${bowl.perNoBall}/no ball`);
