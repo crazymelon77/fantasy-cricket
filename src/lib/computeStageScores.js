@@ -1,5 +1,5 @@
 // src/lib/computeStageScores.js
-import { doc, getDoc, getDocs, setDoc, collection } from "firebase/firestore";
+import { doc, getDoc, getDocs, setDoc, collection, increment } from "firebase/firestore";
 import { db } from "../firebase";
 import { scorePlayer } from "./scoring";
 
@@ -64,5 +64,63 @@ export async function computeStageScores(tId, sId, mId) {
   });
 
   await Promise.all(writes);
+  
+  
+  // 🔽 build a { playerId -> totalPoints } map from freshly written stats
+  // 🔽 totals writeback (unique names to avoid collisions)
+  const matchRefTotals = doc(db, "tournaments", tId, "stages", sId, "matches", mId);
+  const statsColRefTotals = collection(matchRefTotals, "stats");
+  const statsSnapTotals = await getDocs(statsColRefTotals);
+  
+  const playerPointsMapTotals = {};
+  statsSnapTotals.forEach((d) => {
+    const pts = d.data()?.points?.total ?? 0;
+    playerPointsMapTotals[d.id] = Number.isFinite(pts) ? pts : 0;
+  });
+  
+  const xisColRefTotals = collection(db, "tournaments", tId, "stages", sId, "matches", mId, "11s");
+  const xisSnapTotals = await getDocs(xisColRefTotals);
+  
+  const writesAfterTotals = [];
+  xisSnapTotals.forEach((xiDoc) => {
+    const xi = xiDoc.data() || {};
+    const team = Array.isArray(xi.team) ? xi.team : [];
+    const prevTotal = Number(xi.totalPoints ?? 0);
+  
+    const newTotal = team.reduce((sum, pid) => sum + (playerPointsMapTotals[pid] ?? 0), 0);
+    const delta = newTotal - prevTotal;
+  
+    // write match total
+    writesAfterTotals.push(
+      setDoc(doc(xisColRefTotals, xiDoc.id), { totalPoints: newTotal }, { merge: true })
+    );
+  
+    // stage leaderboard += delta
+    writesAfterTotals.push(
+      setDoc(
+        doc(db, "tournaments", tId, "stages", sId, "leaderboard", xiDoc.id),
+        { points: increment(delta) },
+        { merge: true }
+      )
+    );
+  
+    // tournament leaderboard += delta
+writesAfterTotals.push(
+  setDoc(
+    doc(xisColRefTotals, xiDoc.id),
+    {
+      // send back the SAME identity + team so rules pass the equality check
+      uid: xiDoc.id,
+      team: Array.isArray(xi.team) ? xi.team : [],
+      totalPoints: newTotal,
+    },
+    { merge: true }
+  )
+);
+
+  });
+  
+  await Promise.all(writesAfterTotals);
+  
   console.log(`✅ Computed player points for stage ${sId}, match ${mId}`);
 }

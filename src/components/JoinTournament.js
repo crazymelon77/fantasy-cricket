@@ -3,12 +3,14 @@ import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { db, auth } from "../firebase";
 import { query, orderBy } from "firebase/firestore";
 
+
 import {
   doc,
   getDoc,
   setDoc,
   collection,
-  getDocs
+  getDocs,
+  serverTimestamp
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 
@@ -36,6 +38,10 @@ const JoinTournament = () => {
   const [subsUsedLive, setSubsUsedLive] = useState({});     // live (unsaved) subs per stage
   const [subsUsedFromDB, setSubsUsedFromDB] = useState({}); // committed subs per stage
   
+  const [xiByMatch, setXiByMatch] = useState({});        // { [matchId]: string[] of playerIds }
+  const [xiTotalByMatch, setXiTotalByMatch] = useState({}); // { [matchId]: number }
+
+  
   
   const [searchParams] = useSearchParams();
   useEffect(() => {
@@ -50,6 +56,15 @@ const JoinTournament = () => {
     }));
   };
   
+  // ✅ Helper to get Firestore server time (UTC)
+  const getServerTime = async () => {
+    const tempRef = doc(db, "_server_time", "now");
+    await setDoc(tempRef, { now: serverTimestamp() });
+    const snap = await getDoc(tempRef);
+    return snap.data().now.toDate();
+  };
+
+  
   // 🔹 Helper: compute total points earned by a player across all matches in this stage
   const getPlayerTotalPoints = (stageId, playerId) => {
     const matches = stageResults[stageId] || [];
@@ -59,6 +74,7 @@ const JoinTournament = () => {
     }, 0);
   };
   
+
   const handleSort = (field) => {
     setSortConfig((prev) => {
       const newDir = prev.field === field && prev.dir === "asc" ? "desc" : "asc";
@@ -153,17 +169,6 @@ const JoinTournament = () => {
     };
     checkJoined();
   }, [user, id]);
- 
- //remove later//
- useEffect(() => {
-  console.log("✅ savedPlayers:", savedPlayers);
-  console.log("✅ subsUsedFromDB:", subsUsedFromDB);
-}, [savedPlayers, subsUsedFromDB]);
-
-useEffect(() => {
-  console.log("🔄 subsUsedLive:", subsUsedLive);
-}, [subsUsedLive]);
-//remove later//
 
   // join tournament
   const handleJoin = async () => {
@@ -266,6 +271,19 @@ useEffect(() => {
       return next;
     });
   }, [stages, selectedPlayers, playersByTeam]);
+  
+  const handleResetTeam = (stageId) => {
+	  
+	if (!window.confirm("Are you sure you want to reset your team to the last saved version? All unsaved changes will be lost.")) {
+		return; // user cancelled
+	}
+	
+	const lastSaved = savedPlayers[stageId] || [];
+	setSelectedPlayers((prev) => ({ ...prev, [stageId]: lastSaved }));
+	setSubsUsedLive((prev) => ({ ...prev, [stageId]: 0 }));
+
+  };
+
 
   // save team
   const handleSaveTeam = async (stageId) => {
@@ -355,10 +373,64 @@ useEffect(() => {
 	  },
 	  { merge: true }
 	 );
-      alert(`Team for stage "${stage.name}" saved!`);
-	  setSavedPlayers((prev) => ({ ...prev, [stageId]: stageSelections }));
-	  setSubsUsedFromDB((prev) => ({ ...prev, [stageId]: subsUsed }));
-	  setSubsUsedLive((prev) => ({ ...prev, [stageId]: 0 }));
+	 
+	// 🔒 Write XI only for matches that are NOT locked
+	const teamIds = stageSelections.map(sel => sel.playerId);
+	const matchesSnap = await getDocs(
+	  collection(db, "tournaments", id, "stages", stageId, "matches")
+	);
+
+	let xiWritten = 0, xiSkipped = 0;
+	let serverNow = null;
+	
+	for (const mdoc of matchesSnap.docs) {
+	  const m = mdoc.data() || {};
+	  // ✅ Use Firestore server time to decide cutoff
+	  if (!serverNow) {
+		  serverNow = await getServerTime(); // fetch once per save
+	  }
+	  
+	  const cutoff = m.cutoffDate?.toDate ? m.cutoffDate.toDate() : m.cutoffDate;
+	  const isBeforeCutoff = cutoff && serverNow < new Date(cutoff);
+	  if (!isBeforeCutoff) { xiSkipped++; continue; }
+
+
+	  const xiRef = doc(
+		db,
+		"tournaments", id,
+		"stages", stageId,
+		"matches", mdoc.id,
+		"11s", user.uid
+	  );
+
+	  // Only update team + timestamp; preserve totalPoints if present
+	  await setDoc(
+		xiRef,
+		{ uid: user.uid, team: teamIds, updatedAt: serverTimestamp() },
+		{ merge: true }
+	  );
+	  xiWritten++;
+	}
+	console.log(`XI write: written=${xiWritten}, skipped(locked)=${xiSkipped}`);
+
+	// 🔄 refresh my XI + totals for this stage so UI updates right away
+	const matchesSnapAfter = await getDocs(
+	  collection(db, "tournaments", id, "stages", stageId, "matches")
+	);
+	const matchesAfter = matchesSnapAfter.docs.map(d => ({ id: d.id, ...d.data() }));
+	await fetchMyXIForStage(stageId, matchesAfter);
+
+	// 🔹 User-facing summary (single alert)
+	if (xiWritten === 0) {
+	  alert("Cannot save team. All matches in this stage are locked.");
+	  return; // stop further execution
+	} else {
+	  alert(`Saved team. This team will be used for the ${xiWritten} remaining match(es) in this stage.`);
+	}
+
+	setSavedPlayers((prev) => ({ ...prev, [stageId]: stageSelections }));
+	setSubsUsedFromDB((prev) => ({ ...prev, [stageId]: subsUsed }));
+	setSubsUsedLive((prev) => ({ ...prev, [stageId]: 0 }));
 
     } catch (err) {
       console.error("Error saving team:", err);
@@ -372,8 +444,9 @@ useEffect(() => {
   const fetchMatchResults = async (stageId) => {
     const results = [];
     const matchesRef = collection(db, "tournaments", id, "stages", stageId, "matches");
-    const matchesSnap = await getDocs(matchesRef);
-  
+	const matchesSnap = await getDocs(
+	  query(matchesRef, orderBy("order", "asc"))
+	);  
     for (const m of matchesSnap.docs) {
       const matchData = { id: m.id, ...m.data(), players: [] };
   
@@ -387,6 +460,34 @@ useEffect(() => {
   
     return results;
   };
+  
+  const fetchMyXIForStage = async (stageId, matches) => {
+  if (!user) return;
+  const byMatch = {};
+  const totals = {};
+  for (const m of matches) {
+    try {
+      const xiDoc = await getDoc(
+        doc(db, "tournaments", id, "stages", stageId, "matches", m.id, "11s", user.uid)
+      );
+      if (xiDoc.exists()) {
+        const d = xiDoc.data() || {};
+        byMatch[m.id] = Array.isArray(d.team) ? d.team : [];
+        totals[m.id] = Number.isFinite(d.totalPoints) ? d.totalPoints : 0;
+      } else {
+        byMatch[m.id] = [];
+        totals[m.id] = 0;
+      }
+    } catch (e) {
+      console.error("XI load failed for match", m.id, e);
+      byMatch[m.id] = [];
+      totals[m.id] = 0;
+    }
+  }
+  setXiByMatch(prev => ({ ...prev, ...byMatch }));
+  setXiTotalByMatch(prev => ({ ...prev, ...totals }));
+};
+
 
   const formatScoringSummary = (scoring = {}) => {
     const parts = [];
@@ -481,16 +582,12 @@ useEffect(() => {
       </div>
 
       {stages.map((stage) => {
-		const userTeam = selectedPlayers[stage.id] || [];
 		const totalStagePoints =
-		  stageResults[stage.id]?.reduce((sum, match) => {
-			// only include points for players in user's team
-			const matchPoints = userTeam.reduce((teamSum, sel) => {
-			  const p = match.players.find((mp) => mp.id === sel.playerId);
-			  return teamSum + (p?.points?.total ?? 0);
-			}, 0);
-			return sum + matchPoints;
-		  }, 0) || 0;
+		  (stageResults[stage.id] || []).reduce(
+			(sum, m) => sum + (xiTotalByMatch[m.id] ?? 0),
+			0
+		  );
+
 				
         const total = Number(stage.budget || 0);
         const remaining = Number(budgetLeftByStage[stage.id] ?? total);
@@ -533,7 +630,6 @@ useEffect(() => {
               <div className="mt-1 text-sm">
 
 				{/* Scoring summary */}
-				{console.log("Scoring for", stage.name, stage.scoring)}
 				<b>Scoring Rules:</b> <br />
 
 				<div className="text-sm text-gray-700 mt-1">
@@ -562,6 +658,7 @@ useEffect(() => {
 						const matches = await fetchMatchResults(stage.id);
 						setStageResults((prev) => ({ ...prev, [stage.id]: matches }));
 						setExpandedStage(stage.id);
+						await fetchMyXIForStage(stage.id, matches);
 					  }
 				   }}
                   className="text-blue-600 underline text-sm"
@@ -579,29 +676,29 @@ useEffect(() => {
 					<h3 className="font-semibold mb-2">Match Results</h3>
 					
 					<p className="text-lg font-semibold text-gray-800 mt-3 mb-2">
-					  <b>Stage Points: {totalStagePoints ? `${totalStagePoints}` : "Pending"}</b>
+					  <b>Stage Points: {totalStagePoints}</b>
 					</p>
 					
 					{stageResults[stage.id].map((match, idx) => {
-					  const userTeam = selectedPlayers[stage.id] || [];
-					  let totalPoints = 0;
+					  const xi = xiByMatch[match.id] || []; // array of playerIds
 
-					  const playerRows = userTeam.map((sel) => {
-						const p = match.players.find((mp) => mp.id === sel.playerId);
-						if (!p) return null;
-						const pts = p.points || {};
-						totalPoints += pts.total || 0;
-						return (
-						  <tr key={sel.playerId}>
-							<td className="border px-2 py-1">{resolvePlayer(sel.playerId)?.playerName}</td>
-							<td className="border px-2 py-1 text-right">{pts.batting ?? 0}</td>
-							<td className="border px-2 py-1 text-right">{pts.bowling ?? 0}</td>
-							<td className="border px-2 py-1 text-right">{pts.fielding ?? 0}</td>
-							<td className="border px-2 py-1 text-right">{pts.general ?? 0}</td>
-							<td className="border px-2 py-1 text-right font-semibold">{pts.total ?? 0}</td>
-						  </tr>
-						);
-					  });
+						let totalPoints = 0;
+						const playerRows = xi.map((pid) => {
+						  const stat = match.players.find(mp => mp.id === pid);
+						  if (!stat) return null;
+						  const pts = stat.points || {};
+						  totalPoints += pts.total ?? 0;
+						  return (
+							<tr key={pid}>
+							  <td className="border px-2 py-1">{resolvePlayer(pid)?.playerName}</td>
+							  <td className="border px-2 py-1 text-right">{pts.batting ?? 0}</td>
+							  <td className="border px-2 py-1 text-right">{pts.bowling ?? 0}</td>
+							  <td className="border px-2 py-1 text-right">{pts.fielding ?? 0}</td>
+							  <td className="border px-2 py-1 text-right">{pts.general ?? 0}</td>
+							  <td className="border px-2 py-1 text-right font-semibold">{pts.total ?? 0}</td>
+							</tr>
+						  );
+						});
 
 					  const team1Name =
 						teamsByStage[stage.id]?.find((t) => t.id === match.team1)?.name ||
@@ -612,12 +709,18 @@ useEffect(() => {
 						match.team2 ||
 						"TBD";
 
-					  const matchTotal = match.players.some((p) => p.points)
-						? userTeam.reduce((sum, sel) => {
-							const p = match.players.find((mp) => mp.id === sel.playerId);
-							return sum + (p?.points?.total ?? 0);
-						  }, 0)
-						: null;
+					  const matchTotal = match.players.some(p => p.points)
+					  ? xi.reduce((sum, pid) => {
+						  const stat = match.players.find(mp => mp.id === pid);
+						  return sum + (stat?.points?.total ?? 0);
+						}, 0)
+					  : null;
+					  
+					  const isScored = (xiTotalByMatch[match.id] ?? 0) > 0;
+					  const cut = match.cutoffDate?.toDate ? match.cutoffDate.toDate() : match.cutoffDate;
+					  const cutoffStringHere = cut ? new Date(cut).toLocaleString() : "cutoff";
+
+
 
 					  return (
 						<div
@@ -626,20 +729,50 @@ useEffect(() => {
 						>
 						  <div className="flex justify-between items-center">
 							
-							  Match {idx + 1}: {team1Name} vs {team2Name} {" "}
-							  <span className="text-sm text-gray-600 ml-1">
-								({matchTotal !== null ? `match total: ${matchTotal}` : "match total: Pending"}){" "}
-							  </span>
-							
-							<button
-							  onClick={() => toggleMatchDetails(match.id)}
-							  className="text-blue-600 underline text-sm"
-							>
-							  {expandedMatches[match.id] ? "Hide Details" : "Show Details"}
-							</button>
+							  Match {match.order}: {team1Name} vs {team2Name} {" "}
+ 							  {(() => {
+ 							    const total = xiTotalByMatch[match.id] ?? 0;
+ 							    const cut = match.cutoffDate?.toDate ? match.cutoffDate.toDate() : match.cutoffDate;
+ 							    const cutoffTime = cut ? new Date(cut) : null;
+ 							    const now = new Date();
+ 							    const isBeforeCutoff = cutoffTime && now < cutoffTime;
+ 							    const isScored = total > 0;
+							  
+ 							    if (isScored) {
+ 							  	return (
+ 							  	  <>
+ 							  		<span className="text-sm text-gray-600 ml-1">
+ 							  		  (match total: {total})
+ 							  		</span>
+ 							  		<button
+ 							  		  onClick={() => toggleMatchDetails(match.id)}
+ 							  		  className="text-blue-600 underline text-sm"
+ 							  		>
+ 							  		  {expandedMatches[match.id] ? "Hide Details" : "Show Details"}
+ 							  		</button>
+ 							  	  </>
+ 							  	);
+ 							    } else if (isBeforeCutoff) {
+ 							  	return (
+ 							  	  <span className="text-sm text-gray-600 ml-1">
+ 							  		(changes allowed till <b>{cutoffTime.toLocaleString()}</b>)
+ 							  	  </span>
+ 							  	);
+ 							    } else {
+ 							  	return (
+ 							  	  <span className="text-sm text-gray-400 ml-1">
+ 							  		(waiting for results)
+ 							  	  </span>
+ 							  	);
+ 							    }
+ 							  })()}
+							  
+
 						  </div>
 
-						  {expandedMatches[match.id] && (
+						  {(xiTotalByMatch[match.id] != null) && expandedMatches[match.id] && (
+
+
 							<div className="mt-2">
 							  <table className="score-table text-sm border border-gray-300 rounded w-auto">
 								<thead className="bg-gray-100">
@@ -662,7 +795,10 @@ useEffect(() => {
 									<td className="text-right font-semibold" colSpan="5">
 									  Match Total
 									</td>
-									<td className="text-right font-semibold">{totalPoints}</td>
+									<td className="text-right font-semibold">
+									  {xiTotalByMatch[match.id] != null ? xiTotalByMatch[match.id] : totalPoints}
+									</td>
+
 								  </tr>
 								</tfoot>
 							  </table>
@@ -705,13 +841,23 @@ useEffect(() => {
 				</p>
 				
 				{joined && (
-				  <button
-					onClick={() => handleSaveTeam(stage.id)}
-					className="bg-blue-500 text-white px-4 py-2 rounded mb-4"
-				  >
-					Save Team
-				  </button>
+				  <div className="flex gap-2 mb-4">
+					<button
+					  onClick={() => handleSaveTeam(stage.id)}
+					  className="bg-blue-500 text-white px-4 py-2 rounded"
+					>
+					  Save Team
+					</button>
+
+					<button
+					  onClick={() => handleResetTeam(stage.id)}
+					  className="bg-gray-500 text-white px-4 py-2 rounded"
+					>
+					  Reset Team
+					</button>
+				  </div>
 				)}
+
 
                 {stageSelections.length === 0 ? (
                   <p className="text-sm text-gray-700">No players selected.</p>

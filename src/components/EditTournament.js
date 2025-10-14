@@ -8,7 +8,10 @@ import {
   getDocs,
   addDoc,
   deleteDoc,
+  setDoc,
+  serverTimestamp,
 } from "firebase/firestore";
+
 import { useNavigate, useParams } from "react-router-dom";
 import { Link } from "react-router-dom";
 
@@ -55,12 +58,24 @@ const saveTournament = async () => {
         }
         setTournament({ id: tourSnap.id, ...tourSnap.data() });
 
-        // stages
-        const stageSnap = await getDocs(
-          collection(db, "tournaments", tournamentId, "stages")
-        );
-        const stageList = stageSnap.docs.map((s) => ({ id: s.id, ...s.data() }));
-        setStages(stageList);
+   // stages (with matches fetched from subcollection)
+   const stageSnap = await getDocs(
+     collection(db, "tournaments", tournamentId, "stages")
+   );
+   const stageList = await Promise.all(
+     stageSnap.docs.map(async (s) => {
+       const base = { id: s.id, ...s.data() };
+   
+       // read matches from subcollection (single source of truth)
+       const matchSnap = await getDocs(
+         collection(db, "tournaments", tournamentId, "stages", s.id, "matches")
+       );
+       const matches = matchSnap.docs.map((m) => ({ id: m.id, ...m.data() }));
+   
+       return { ...base, matches }; // override any stale stage.matches field
+     })
+   );
+   setStages(stageList);
 
         // teams + players
         const teamsData = {};
@@ -224,33 +239,39 @@ const addStage = async () => {
   };
 
   // ---------- Matches ----------
-const addMatch = async (stageId) => {
-  try {
-    const newMatch = {
-      team1: "TBD",
-      team2: "TBD",
-      matchDate: null,
-      cutoffDate: null,
-    };
+  const addMatch = async (stageId) => {
+    try {
+      // 🔢 compute next order within this stage
+      const stage = stages.find(s => s.id === stageId);
+      const currentOrders = (stage?.matches || []).map(m => m.order || 0);
+      const nextOrder = (currentOrders.length ? Math.max(...currentOrders) : 0) + 1;
+  
+      const newMatch = {
+        team1: "TBD",
+        team2: "TBD",
+        matchDate: null,
+        cutoffDate: null,
+        order: nextOrder, // ✅ new
+      };
+  
+      const matchRef = await addDoc(
+        collection(db, "tournaments", tournamentId, "stages", stageId, "matches"),
+        newMatch
+      );
+  
+      setStages((prev) =>
+        prev.map((s) =>
+          s.id === stageId
+            ? { ...s, matches: [...(s.matches || []), { id: matchRef.id, ...newMatch }] }
+            : s
+        )
+      );
+    } catch (err) {
+      console.error("Error adding match:", err);
+      alert("Failed to add match");
+    }
+  };
 
-    const matchRef = await addDoc(
-      collection(db, "tournaments", tournamentId, "stages", stageId, "matches"),
-      newMatch
-    );
-
-    // optional: update state so UI shows it immediately
-    setStages((prev) =>
-      prev.map((s) =>
-        s.id === stageId
-          ? { ...s, matches: [...(s.matches || []), { id: matchRef.id, ...newMatch }] }
-          : s
-      )
-    );
-  } catch (err) {
-    console.error("Error adding match:", err);
-    alert("Failed to add match");
-  }
-};
 
 const saveMatch = async (stageId, match) => {
   try {
@@ -272,7 +293,16 @@ const saveMatch = async (stageId, match) => {
       team2: match.team2,
       matchDate: match.matchDate,
       cutoffDate: match.cutoffDate,
+	  order: Number(match.order) || 0,
     });
+	
+	// if we just saved the match as locked, auto-snapshot XIs
+	/*disabling snapshot
+	if (match.locked) {
+	  await snapshotMatchXIs(tournamentId, stageId, match.id);
+	}
+	*/
+
     
   } catch (err) {
     console.error("Error saving match:", err);
@@ -310,6 +340,67 @@ const removeMatch = async (stageIndex, matchIndex) => {
     alert("Failed to remove match");
   }
 };
+
+// 🔒 Snapshot XIs for a match (manual trigger)
+/* disabling snapshots
+const snapshotMatchXIs = async (tid, sid, mid) => {
+  try {
+    // 1) validate match + cutoff
+    const matchRef = doc(db, "tournaments", tid, "stages", sid, "matches", mid);
+    const matchSnap = await getDoc(matchRef);
+    if (!matchSnap.exists()) {
+      alert("Match not found");
+      return;
+    }
+    const matchData = matchSnap.data() || {};
+    const cutoff = matchData.cutoffDate?.toDate ? matchData.cutoffDate.toDate() : matchData.cutoffDate;
+    if (!cutoff) {
+      alert("No cutoff date set for this match.");
+      return;
+    }
+    const now = new Date();
+    if (now < new Date(cutoff)) {
+      const proceed = window.confirm("Cutoff is in the future. Snapshot anyway?");
+      if (!proceed) return;
+    }
+
+    // 2) iterate all user_teams docs
+    const usersSnap = await getDocs(collection(db, "user_teams"));
+    let created = 0, skipped = 0;
+
+    for (const udoc of usersSnap.docs) {
+      const udata = udoc.data() || {};
+      const rec = udata[tid];                     // tournament bucket under this user
+      if (!rec?.joined) { skipped++; continue; }
+
+      const savedSquad = rec.stages?.[sid] || []; // last saved XI for this stage
+      if (!Array.isArray(savedSquad) || savedSquad.length === 0) { skipped++; continue; }
+
+      // flat list of playerIds
+      const team = savedSquad.map(p => p?.playerId).filter(Boolean);
+      if (team.length === 0) { skipped++; continue; }
+
+      // 3) write per-user XI if not already present
+      const xiRef = doc(db, "tournaments", tid, "stages", sid, "matches", mid, "11s", udoc.id);
+      const xiSnap = await getDoc(xiRef);
+      if (xiSnap.exists()) { skipped++; continue; }
+
+      await setDoc(xiRef, {
+        uid: udoc.id,
+        team,               // string[] of playerIds
+        totalPoints: 0,     // will be filled by scoring later
+        createdAt: serverTimestamp(),
+      });
+      created++;
+    }
+
+    alert(`Snapshot complete. Created: ${created}, Skipped: ${skipped}`);
+  } catch (e) {
+    console.error("snapshotMatchXIs error", e);
+    alert("Snapshot failed. See console for details.");
+  }
+};
+*/
 
 
   const changeMatch = (stageIndex, matchIndex, field, value) => {
@@ -843,6 +934,17 @@ const removeMatch = async (stageIndex, matchIndex) => {
                 style={{ marginBottom: "10px", padding: "5px", border: "1px solid #ccc" }}
               >
                 <label>Match {mIdx + 1} </label>
+				
+			<div>
+			  <label>Order:</label>
+			  <input
+				type="number"
+				value={match.order ?? (mIdx + 1)}
+				onChange={(e) => changeMatch(sIdx, mIdx, "order", Number(e.target.value))}
+				style={{ width: "80px" }}
+			  />
+			</div>
+
 
 			<div>
 				<label>Team 1:</label>
@@ -887,10 +989,14 @@ const removeMatch = async (stageIndex, matchIndex) => {
                   />
                 </div>
 
+
 				<button onClick={() => removeMatch(sIdx, mIdx)}>Remove Match</button>
 				<button onClick={() => saveMatch(stage.id, match)}>Save Match</button>
-
-				
+				{/* disabling snapshots
+				<button onClick={() => snapshotMatchXIs(tournamentId, stage.id, match.id)}>
+				  Snapshot XIs
+				</button>
+				*/}
 				{/* 🔹 New Scorecard button */}
 				<Link
 				  to={`/tournament/${tournamentId}/stage/${stage.id}/match/${match.id}/results`}
