@@ -14,6 +14,8 @@ import {
 
 import { useNavigate, useParams } from "react-router-dom";
 import { Link } from "react-router-dom";
+import { query, orderBy } from "firebase/firestore";
+
 
 
 const EditTournament = () => {
@@ -68,8 +70,11 @@ const saveTournament = async () => {
    
        // read matches from subcollection (single source of truth)
        const matchSnap = await getDocs(
-         collection(db, "tournaments", tournamentId, "stages", s.id, "matches")
-       );
+		 query(
+			 collection(db, "tournaments", tournamentId, "stages", s.id, "matches"),
+			 orderBy("order", "asc")
+		   )
+		 );
        const matches = matchSnap.docs.map((m) => ({ id: m.id, ...m.data() }));
    
        return { ...base, matches }; // override any stale stage.matches field

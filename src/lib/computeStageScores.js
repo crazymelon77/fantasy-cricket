@@ -123,4 +123,11 @@ writesAfterTotals.push(
   await Promise.all(writesAfterTotals);
   
   console.log(`✅ Computed player points for stage ${sId}, match ${mId}`);
+  // 🔹 Mark match as scored
+  await setDoc(
+    doc(db, "tournaments", tId, "stages", sId, "matches", mId),
+    { scored: true },
+    { merge: true }
+  );
+  console.log(`🏁 Match ${mId} marked as scored`);
 }

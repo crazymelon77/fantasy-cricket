@@ -56,15 +56,7 @@ const JoinTournament = () => {
     }));
   };
   
-  // ✅ Helper to get Firestore server time (UTC)
-  const getServerTime = async () => {
-    const tempRef = doc(db, "_server_time", "now");
-    await setDoc(tempRef, { now: serverTimestamp() });
-    const snap = await getDoc(tempRef);
-    return snap.data().now.toDate();
-  };
-
-  
+ 
   // 🔹 Helper: compute total points earned by a player across all matches in this stage
   const getPlayerTotalPoints = (stageId, playerId) => {
     const matches = stageResults[stageId] || [];
@@ -266,7 +258,7 @@ const JoinTournament = () => {
           if (match) spent += Number(match.value || 0);
         });
 
-        next[stage.id] = Math.max(0, total - spent);
+        next[stage.id] = total - spent;
       });
       return next;
     });
@@ -381,17 +373,12 @@ const JoinTournament = () => {
 	);
 
 	let xiWritten = 0, xiSkipped = 0;
-	let serverNow = null;
 	
 	for (const mdoc of matchesSnap.docs) {
 	  const m = mdoc.data() || {};
-	  // ✅ Use Firestore server time to decide cutoff
-	  if (!serverNow) {
-		  serverNow = await getServerTime(); // fetch once per save
-	  }
 	  
 	  const cutoff = m.cutoffDate?.toDate ? m.cutoffDate.toDate() : m.cutoffDate;
-	  const isBeforeCutoff = cutoff && serverNow < new Date(cutoff);
+	  const isBeforeCutoff = cutoff && new Date() < new Date(cutoff);
 	  if (!isBeforeCutoff) { xiSkipped++; continue; }
 
 
@@ -447,6 +434,7 @@ const JoinTournament = () => {
 	const matchesSnap = await getDocs(
 	  query(matchesRef, orderBy("order", "asc"))
 	);  
+	console.log("Fetching match results for user:", user?.uid);
     for (const m of matchesSnap.docs) {
       const matchData = { id: m.id, ...m.data(), players: [] };
   
@@ -454,7 +442,26 @@ const JoinTournament = () => {
       statsSnap.forEach((s) => {
         matchData.players.push({ id: s.id, ...s.data() });
       });
-  
+	  
+	  // 🔹 Fetch this user's locked XI for this match
+		const xiRef = doc(
+		  db,
+		  "tournaments", id,
+		  "stages", stageId,
+		  "matches", m.id,
+		  "11s", user.uid
+		);
+	  const xiSnap = await getDoc(xiRef);
+	  if (xiSnap.exists()) {
+		  matchData.userXI = xiSnap.data().team || [];
+		  
+		  console.log(`[DB READ] Match ${m.id}: XI found. Player Count: ${matchData.userXI.length}`);
+	  } else {
+		  matchData.userXI = [];
+		  
+		  console.log(`[DB READ] Match ${m.id}: NO XI found.`);
+	  }
+ 
       results.push(matchData);
     }
   
@@ -656,6 +663,9 @@ const JoinTournament = () => {
 						setExpandedStage(null);
 					} else {
 						const matches = await fetchMatchResults(stage.id);
+						
+						console.log(`[STATE SET] Stage ${stage.id} ready for state update. Matches:`, matches);
+						
 						setStageResults((prev) => ({ ...prev, [stage.id]: matches }));
 						setExpandedStage(stage.id);
 						await fetchMyXIForStage(stage.id, matches);
@@ -716,11 +726,10 @@ const JoinTournament = () => {
 						}, 0)
 					  : null;
 					  
-					  const isScored = (xiTotalByMatch[match.id] ?? 0) > 0;
+					  const isScored = !!match.scored;
 					  const cut = match.cutoffDate?.toDate ? match.cutoffDate.toDate() : match.cutoffDate;
 					  const cutoffStringHere = cut ? new Date(cut).toLocaleString() : "cutoff";
-
-
+					  
 
 					  return (
 						<div
@@ -759,18 +768,54 @@ const JoinTournament = () => {
  							  	  </span>
  							  	);
  							    } else {
- 							  	return (
- 							  	  <span className="text-sm text-gray-400 ml-1">
- 							  		(waiting for results)
- 							  	  </span>
- 							  	);
+								  return (
+								    <>
+								    <span className="text-sm text-gray-400 ml-1">
+								  	(waiting for results) {" "}
+								    </span>
+								    <button
+								  	onClick={() => toggleMatchDetails(match.id)}
+								  	className="text-blue-600 underline text-sm ml-2"
+								    >
+								  	{expandedMatches[match.id] ? "Hide Details" : "Show Details"}
+								    </button>
+								    </>
+								  );
  							    }
  							  })()}
 							  
 
 						  </div>
+						 
+						  {/* 🔹 Show team details for matches that are locked but not yet scored */}
+							{expandedMatches[match.id] && !isScored && (
+							  <div className="mt-2">
+								<table className="score-table text-sm border border-gray-300 rounded w-auto">
+								  <thead className="bg-gray-100">
+									<tr>
+									  <th className="border px-2 py-1 text-left">Player</th>
+									  <th className="border px-2 py-1 text-right">Role</th>
+									  <th className="border px-2 py-1 text-right">Team</th>
+									</tr>
+								  </thead>
+								  <tbody>
+									{(match.userXI || []).map(pid => {
+									  const p = resolvePlayer(pid);
+									  return (
+										<tr key={pid}>
+										  <td className="border px-2 py-1">{p?.playerName || pid}</td>
+										  <td className="border px-2 py-1 text-right">{p?.role || ""}</td>
+										  <td className="border px-2 py-1 text-right">{p?.team || ""}</td>
+										</tr>
+									  );
+									})}
+								  </tbody>
+								</table>
+							  </div>
+							)}
 
-						  {(xiTotalByMatch[match.id] != null) && expandedMatches[match.id] && (
+						  {isScored && expandedMatches[match.id] && (
+
 
 
 							<div className="mt-2">
