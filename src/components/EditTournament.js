@@ -641,7 +641,7 @@ const snapshotMatchXIs = async (tid, sid, mid) => {
 		  onChange={(e) => handleStageChange(sIdx, "order", Number(e.target.value))}
 		/>
 
-		<button onClick={() => removeStage(stage.id)}>Remove Stage</button>
+		<button class="btn-danger" onClick={() => removeStage(stage.id)}>Remove Stage</button>
 
             <label>Max Subs:</label>
             <input
@@ -994,7 +994,7 @@ const snapshotMatchXIs = async (tid, sid, mid) => {
                 </div>
 
 
-				<button onClick={() => removeMatch(sIdx, mIdx)}>Remove Match</button>
+				<button class="btn-danger" onClick={() => removeMatch(sIdx, mIdx)}>Remove Match</button>
 				<button onClick={() => saveMatch(stage.id, match)}>Save Match</button>
 				{/* disabling snapshots
 				<button onClick={() => snapshotMatchXIs(tournamentId, stage.id, match.id)}>
@@ -1005,7 +1005,7 @@ const snapshotMatchXIs = async (tid, sid, mid) => {
 				<Link
 				  to={`/tournament/${tournamentId}/stage/${stage.id}/match/${match.id}/results`}
 				>
-				  <button>Scorecard</button>
+				  <button class="btn-admin">Scorecard</button>
 				</Link>
 
               </div>
@@ -1026,7 +1026,7 @@ const snapshotMatchXIs = async (tid, sid, mid) => {
                   value={team.name}
                   onChange={(e) => changeTeamName(stage.id, team.id, e.target.value)}
                 />
-                <button onClick={() => removeTeam(stage.id, team.id)}>Remove Team</button>
+                <button class="btn-danger" onClick={() => removeTeam(stage.id, team.id)}>Remove Team</button>
                 <button onClick={() => saveTeam(stage.id, team)}>Save Team</button>
 
                 <h5>Players</h5>
@@ -1054,7 +1054,7 @@ const snapshotMatchXIs = async (tid, sid, mid) => {
                       value={player.value}
                       onChange={(e) => changePlayer(team.id, player.id, "value", e.target.value)}
                     />
-                    <button onClick={() => removePlayer(stage.id, team.id, player.id)}>
+                    <button class="btn-danger" onClick={() => removePlayer(stage.id, team.id, player.id)}>
                       Remove
                     </button>
                     <button onClick={() => savePlayer(stage.id, team.id, player)}>Save</button>
