@@ -130,6 +130,7 @@ function EnterMatchResults() {
     sixes: 0,
     zeros: 0,
     notOuts: 0,
+	milestones: 0,
     ballsBowled: 0,
     runsGiven: 0,
     dotBalls: 0,
@@ -137,6 +138,7 @@ function EnterMatchResults() {
     wides: 0,
     noBalls: 0,
     wickets: 0,
+	hauls: 0,
     catches: 0,
     runouts: 0,
     played: false,
@@ -264,8 +266,8 @@ const exportCSV = () => {
   const headers = [
     "playerId","name","team",
     "mom","awayTeam",
-    "runs","ballsFaced","fours","sixes","zeros","notOuts",
-    "ballsBowled","maidenOvers","runsGiven","dotBalls","wides","noBalls","wickets",
+    "runs","ballsFaced","fours","sixes","zeros","notOuts","milestones",
+    "ballsBowled","maidenOvers","runsGiven","dotBalls","wides","noBalls","wickets","hauls",
     "catches","runouts","won","played"
   ];
 
@@ -284,6 +286,7 @@ const exportCSV = () => {
       stats[p.id]?.sixes ?? 0,
       stats[p.id]?.zeros ?? 0,
       stats[p.id]?.notOuts ?? 0,
+	  stats[p.id]?.milestones ?? 0,
       stats[p.id]?.ballsBowled ?? 0,
       stats[p.id]?.maidenOvers ?? 0,
       stats[p.id]?.runsGiven ?? 0,
@@ -291,6 +294,7 @@ const exportCSV = () => {
       stats[p.id]?.wides ?? 0,
       stats[p.id]?.noBalls ?? 0,
       stats[p.id]?.wickets ?? 0,
+	  stats[p.id]?.hauls ?? 0,
       stats[p.id]?.catches ?? 0,
       stats[p.id]?.runouts ?? 0,
       stats[p.id]?.won ?? false,
@@ -324,9 +328,9 @@ const handleImportCSV = async (e) => {
   const IDX = {
     PID: 0, NAME: 1, TEAM: 2,
     MOM: 3, AWAY: 4,
-    RUNS: 5, BF: 6, FOURS: 7, SIXES: 8, ZEROS: 9, NOTOUTS: 10,
-    BALLS_BOWLED: 11, MAIDENS: 12, RUNS_GIVEN: 13, DOTBALLS: 14, WIDES: 15, NOBALLS: 16,
-    WICKETS: 17, CATCHES: 18, RUNOUTS: 19, WON: 20, PLAYED: 21,
+    RUNS: 5, BF: 6, FOURS: 7, SIXES: 8, ZEROS: 9, NOTOUTS: 10, MILESTONES: 11,
+    BALLS_BOWLED: 12, MAIDENS: 13, RUNS_GIVEN: 14, DOTBALLS: 15, WIDES: 16, NOBALLS: 17,
+    WICKETS: 18, HAULS: 19, CATCHES: 20, RUNOUTS: 21, WON: 22, PLAYED: 23,
   };
 
   const toNum = (v, d = 0) => {
@@ -350,6 +354,7 @@ const handleImportCSV = async (e) => {
       sixes: toNum(cols[IDX.SIXES]),
       zeros: toNum(cols[IDX.ZEROS]),
       notOuts: toNum(cols[IDX.NOTOUTS]),
+	  milestones: toNum(cols[IDX.MILESTONES]),
       ballsBowled: toNum(cols[IDX.BALLS_BOWLED]),
       maidenOvers: toNum(cols[IDX.MAIDENS]),
       runsGiven: toNum(cols[IDX.RUNS_GIVEN]),
@@ -357,6 +362,7 @@ const handleImportCSV = async (e) => {
       wides: toNum(cols[IDX.WIDES]),
       noBalls: toNum(cols[IDX.NOBALLS]),
       wickets: toNum(cols[IDX.WICKETS]),
+	  hauls: toNum(cols[IDX.HAULS]),
       catches: toNum(cols[IDX.CATCHES]),
       runouts: toNum(cols[IDX.RUNOUTS]),
       won: toBool(cols[IDX.WON]),
@@ -473,6 +479,8 @@ const handleImportCSV = async (e) => {
               <input type="number" value={stats[p.id]?.zeros ?? 0} onChange={(e) => handleChange(p.id, "zeros", e.target.value)} />
               <label>Not Outs:</label>
               <input type="number" value={stats[p.id]?.notOuts ?? 0} onChange={(e) => handleChange(p.id, "notOuts", e.target.value)} />
+			  <label>Milestones:</label>
+			  <input type="number" value={stats[p.id]?.milestones ?? 0} onChange={(e) => handleChange(p.id, "milestones", e.target.value)} />
             </div>
 
             {/* Bowling */}
@@ -491,6 +499,8 @@ const handleImportCSV = async (e) => {
               <input type="number" value={stats[p.id]?.noBalls ?? 0} onChange={(e) => handleChange(p.id, "noBalls", e.target.value)} />
               <label>Wickets:</label>
               <input type="number" value={stats[p.id]?.wickets ?? 0} onChange={(e) => handleChange(p.id, "wickets", e.target.value)} />
+			  <label>Hauls:</label>
+			  <input type="number" value={stats[p.id]?.hauls ?? 0} onChange={(e) => handleChange (p.id, "hauls", e.target.value)} />
             </div>
 
             {/* Fielding */}

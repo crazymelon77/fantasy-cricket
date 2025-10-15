@@ -71,3 +71,22 @@
 .score-table tbody tr:nth-child(odd) {
   background: #fafafa;
 }
+
+/* Unified input styling for a cleaner, consistent look */
+input[type="number"],
+input[type="text"] {
+  width: 70px;
+  padding: 4px 6px;
+  margin: 2px 4px;
+  font-size: 0.9rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+input[type="number"]:focus,
+input[type="text"]:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 2px rgba(0, 123, 255, 0.5);
+}

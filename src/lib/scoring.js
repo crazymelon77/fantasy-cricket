@@ -9,7 +9,7 @@ export function scoreBatting(bat, s) {
   pts += (bat.perSix ?? 0) * (s.sixes ?? 0);
   if (s.notOut) pts += (bat.notOutBonus ?? 0);
   if (bat.bonusEveryXRuns?.x && bat.bonusEveryXRuns?.points) {
-    const times = Math.floor((s.runs ?? 0) / bat.bonusEveryXRuns.x);
+    const times = s.milestones ?? 0;
     pts += times * bat.bonusEveryXRuns.points;
   }
   return pts;
@@ -26,7 +26,7 @@ export function scoreBowling(bowl, s) {
   pts += (bowl.perWicket ?? 0) * (s.wickets ?? 0);
   if (bowl.bonusAfterMinWickets?.min && bowl.bonusAfterMinWickets?.points) {
     if ((s.wickets ?? 0) > bowl.bonusAfterMinWickets.min) {
-      const overMin = (s.wickets ?? 0) - bowl.bonusAfterMinWickets.min;
+      const overMin = s.hauls ?? 0;
       pts += overMin * bowl.bonusAfterMinWickets.points;
     }
   }
