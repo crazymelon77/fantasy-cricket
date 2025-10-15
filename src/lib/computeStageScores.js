@@ -1,5 +1,5 @@
 // src/lib/computeStageScores.js
-import { doc, getDoc, getDocs, setDoc, collection, increment } from "firebase/firestore";
+import { doc, getDoc, getDocs, setDoc, collection } from "firebase/firestore";
 import { db } from "../firebase";
 import { scorePlayer } from "./scoring";
 
@@ -19,7 +19,6 @@ export async function computeStageScores(tId, sId, mId) {
 
   // 3) Compute + persist points on each player's stats doc
   const writes = [];
-  const playerPoints = {}; // store player totals for later user calculations
 
   statsSnap.forEach((d) => {
     const pid = d.id;
@@ -47,9 +46,6 @@ export async function computeStageScores(tId, sId, mId) {
       points.bowling += (scoring.bowling?.perMaidenOver || 0) * s.maidenOvers;
       points.total += (scoring.bowling?.perMaidenOver || 0) * s.maidenOvers;
     }
-
-    // save player totals
-    playerPoints[pid] = points.total;
 
     writes.push(
       setDoc(
@@ -85,41 +81,14 @@ export async function computeStageScores(tId, sId, mId) {
   xisSnapTotals.forEach((xiDoc) => {
     const xi = xiDoc.data() || {};
     const team = Array.isArray(xi.team) ? xi.team : [];
-    const prevTotal = Number(xi.totalPoints ?? 0);
   
     const newTotal = team.reduce((sum, pid) => sum + (playerPointsMapTotals[pid] ?? 0), 0);
-    const delta = newTotal - prevTotal;
   
     // write match total
     writesAfterTotals.push(
       setDoc(doc(xisColRefTotals, xiDoc.id), { totalPoints: newTotal }, { merge: true })
     );
-  
-    // stage leaderboard += delta
-    writesAfterTotals.push(
-      setDoc(
-        doc(db, "tournaments", tId, "stages", sId, "leaderboard", xiDoc.id),
-        { points: increment(delta) },
-        { merge: true }
-      )
-    );
-  
-    // tournament leaderboard += delta
-writesAfterTotals.push(
-  setDoc(
-    doc(xisColRefTotals, xiDoc.id),
-    {
-      // send back the SAME identity + team so rules pass the equality check
-      uid: xiDoc.id,
-      team: Array.isArray(xi.team) ? xi.team : [],
-      totalPoints: newTotal,
-    },
-    { merge: true }
-  )
-);
-
   });
-  
   await Promise.all(writesAfterTotals);
   
   console.log(`✅ Computed player points for stage ${sId}, match ${mId}`);

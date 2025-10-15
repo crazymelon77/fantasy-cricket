@@ -101,7 +101,7 @@ const HomePage = () => {
 
         <button
           onClick={handleLogout}
-          className="bg-red-500 text-white px-4 py-2 rounded"
+          className="btn-danger"
         >
           Logout
         </button>
@@ -143,7 +143,7 @@ const HomePage = () => {
   {isAdmin && (
     <button
       onClick={() => navigate(`/edit-tournament/${tournament.id}`)}
-      className="bg-blue-500 text-white px-3 py-1 rounded"
+      className="btn-admin"
     >
       Edit
     </button>
@@ -162,7 +162,7 @@ const HomePage = () => {
 			<p>You have admin privileges.</p>
 			<button
 			  onClick={() => navigate("/create-tournament")}
-			  className="bg-green-500 text-white px-4 py-2 rounded mb-4"
+			  className="btn-admin"
 			>
 			  Create Tournament
 			</button>
@@ -182,7 +182,7 @@ const HomePage = () => {
 						<span>{tournament.name}</span>
 						<button
 						  onClick={() => navigate(`/edit-tournament/${tournament.id}`)}
-						  className="bg-blue-500 text-white px-3 py-1 rounded"
+						  className="btn-admin"
 						>
 						  Edit
 						</button>

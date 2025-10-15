@@ -575,7 +575,7 @@ const JoinTournament = () => {
         <h1 className="text-2xl font-bold">{tournament.name}</h1>
         <div className="flex gap-2">
           {joined ? (
-            <button onClick={handleLeave} className="bg-red-500 text-white px-4 py-2 rounded">Leave</button>
+            <button onClick={handleLeave} className="btn-danger">Leave</button>
           ) : (
             <button onClick={handleJoin} className="bg-green-500 text-white px-4 py-2 rounded">Join</button>
           )}
@@ -672,7 +672,7 @@ const JoinTournament = () => {
 						await fetchMyXIForStage(stage.id, matches);
 					  }
 				   }}
-                  className="text-blue-600 underline text-sm"
+                  className="btn-secondary"
                 >
                   {isExpanded ? "Collapse" : "Expand"}
                 </button>
@@ -756,7 +756,7 @@ const JoinTournament = () => {
  							  		</span>
  							  		<button
  							  		  onClick={() => toggleMatchDetails(match.id)}
- 							  		  className="text-blue-600 underline text-sm"
+ 							  		  className="btn-secondary"
  							  		>
  							  		  {expandedMatches[match.id] ? "Hide Details" : "Show Details"}
  							  		</button>

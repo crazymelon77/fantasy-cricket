@@ -276,7 +276,7 @@ const Leaderboard = () => {
                     <td key={s.id} style={{textAlign:"right"}}>
                       {anyRecorded ? (
                         <button
-                          className="text-blue-600 underline"
+                          className="btn-secondary"
                           onClick={() => toggleStageExpand(r.uid, s.id)}
                         >
                           {val} {expandedStages[r.uid]?.[s.id] ? "▲" : "▼"}
@@ -343,7 +343,7 @@ const Leaderboard = () => {
                                     <td style={{textAlign:"center"}}>
                                       {hasLocked ? (
                                         <button
-                                          className="text-blue-600 underline"
+                                          className="btn-secondary"
                                           onClick={() => toggleMatchExpand(r.uid, s.id, m.id)}
                                         >
                                           {expandedMatches[r.uid]?.[s.id]?.[m.id] ? "Hide" : "Details"}

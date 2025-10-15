@@ -73,9 +73,10 @@
 }
 
 /* Unified input styling for a cleaner, consistent look */
+
+/* Default shared styles */
 input[type="number"],
 input[type="text"] {
-  width: 70px;
   padding: 4px 6px;
   margin: 2px 4px;
   font-size: 0.9rem;
@@ -84,9 +85,163 @@ input[type="text"] {
   box-sizing: border-box;
 }
 
+/* Specific widths */
+input[type="text"] {
+  width: 180px; /* wider for names, labels, etc. */
+}
+
+input[type="number"] {
+  width: 80px; /* narrower for numeric fields */
+}
+
+/* Focus effect */
 input[type="number"]:focus,
 input[type="text"]:focus {
   outline: none;
   border-color: #007bff;
   box-shadow: 0 0 2px rgba(0, 123, 255, 0.5);
+}
+
+/* Dropdowns styled to match input boxes */
+select {
+  width: 180px;
+  padding: 4px 28px 4px 6px; /* right padding for the arrow */
+  margin: 2px 4px;
+  font-size: 0.9rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: white;
+  box-sizing: border-box;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
+  /* custom SVG arrow */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' fill='%23666' height='14' width='14' viewBox='0 0 20 20'><path d='M5 7l5 5 5-5z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 12px;
+}
+
+select:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 2px rgba(0, 123, 255, 0.5);
+}
+
+/* Date/Time pickers styled to match input boxes */
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"] {
+  width: 180px;             /* match text inputs */
+  padding: 4px 6px;
+  margin: 2px 4px;
+  font-size: 0.9rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: white;
+  box-sizing: border-box;
+  color-scheme: light;      /* ensures calendar icons stay visible in dark mode */
+}
+
+/* Focus state same as others */
+input[type="date"]:focus,
+input[type="datetime-local"]:focus,
+input[type="time"]:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 2px rgba(0, 123, 255, 0.5);
+}
+
+/* Unified button styling — muted steel theme */
+button {
+  background-color: #c7d0da;   /* soft bluish-gray */
+  border: 1px solid #b5bec8;
+  color: #1a1a1a;
+  padding: 6px 12px;
+  margin: 2px 4px;
+  font-size: 0.9rem;
+  border-radius: 4px;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+button:hover {
+  background-color: #b6c0ca;   /* slightly darker on hover */
+}
+
+button:active {
+  background-color: #a5b0bc;   /* pressed state */
+}
+
+button:focus {
+  outline: none;
+  box-shadow: 0 0 3px rgba(150, 160, 170, 0.5);
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Admin-only blue accent buttons */
+button.btn-admin {
+  background-color: #007bff;
+  border-color: #007bff;
+  color: #fff;
+}
+
+button.btn-admin:hover {
+  background-color: #0069d9;
+}
+
+button.btn-admin:active {
+  background-color: #005cbf;
+}
+
+button.btn-admin:focus {
+  outline: none;
+  box-shadow: 0 0 3px rgba(0, 123, 255, 0.5);
+}
+
+/* Secondary action buttons (Expand, Details) — white with gray border */
+button.btn-secondary {
+  background-color: #ffffff;
+  border: 1px solid #bfc4ca;   /* soft gray border */
+  color: #333;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+button.btn-secondary:hover {
+  background-color: #f3f4f6;   /* light gray on hover */
+}
+
+button.btn-secondary:active {
+  background-color: #e5e7eb;   /* slightly darker press state */
+}
+
+button.btn-secondary:focus {
+  outline: none;
+  box-shadow: 0 0 3px rgba(180, 185, 190, 0.5);
+}
+
+/* Leave / destructive action buttons — pastel red theme */
+button.btn-danger {
+  background-color: #f4b6b6;   /* pastel red */
+  border: 1px solid #e79b9b;
+  color: #7a0000;
+}
+
+button.btn-danger:hover {
+  background-color: #ee9f9f;
+}
+
+button.btn-danger:active {
+  background-color: #e78a8a;
+}
+
+button.btn-danger:focus {
+  outline: none;
+  box-shadow: 0 0 3px rgba(231, 138, 138, 0.5);
 }

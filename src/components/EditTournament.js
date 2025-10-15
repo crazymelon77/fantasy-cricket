@@ -203,7 +203,6 @@ const addStage = async () => {
       },
       fielding: { perCatch: 0, perRunout: 0 },
     },
-    matches: [],
   };
 
   const stageRef = await addDoc(
