@@ -245,3 +245,101 @@ button.btn-danger:focus {
   outline: none;
   box-shadow: 0 0 3px rgba(231, 138, 138, 0.5);
 }
+
+/* ===== Leaderboard Table Styles ===== */
+/* ===== Main Leaderboard (Top Level) ===== */
+table.main-leaderboard {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+  border: 2px solid #9ca3af;           /* outer border */
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.05);
+}
+
+/* thicker cell borders */
+table.main-leaderboard th,
+table.main-leaderboard td {
+  border: 2px solid #9ca3af;           /* thicker gray cell borders */
+  padding: 8px 10px;
+}
+
+table.main-leaderboard th {
+  background-color: #f3f4f6;
+  font-weight: 600;
+}
+
+table.main-leaderboard tbody tr:nth-child(odd) {
+  background-color: #fafafa;
+}
+
+/* Highlight row for "Matches in {stage}" */
+td.highlight-matches {
+  background-color: #cbd5e1;   /* medium gray */
+  font-weight: 600;
+  text-align: center;
+  border-top: 2px solid #9ca3af;
+  border-bottom: 2px solid #9ca3af;
+  padding: 8px 0;
+}
+
+/* ===== Expanded Match Breakdown (Level 2) ===== */
+table.match-breakdown {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  margin-top: 4px;
+  border: 1px solid #dbeafe;          /* soft blue border */
+}
+
+table.match-breakdown th,
+table.match-breakdown td {
+  border: 1px solid #e5e7eb;
+  padding: 6px 8px;
+}
+
+table.match-breakdown th {
+  background-color: #eff6ff;          /* light blue header */
+  font-weight: 600;
+}
+
+table.match-breakdown tbody tr:nth-child(odd) {
+  background-color: #ffffff;
+}
+
+table.match-breakdown tbody tr:nth-child(even) {
+  background-color: #f0f9ff;          /* very light blue */
+}
+
+/* ===== Player Breakdown (Level 3) ===== */
+table.player-details {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-top: 4px;
+  border: 1px solid #bfdbfe;          /* medium blue border */
+}
+
+table.player-details th,
+table.player-details td {
+  border: 1px solid #e5e7eb;
+  padding: 6px 8px;
+}
+
+table.player-details th {
+  background-color: #dbeafe;          /* header: medium blue */
+  font-weight: 600;
+}
+
+table.player-details tbody tr:nth-child(odd) {
+  background-color: #ffffff;
+}
+
+table.player-details tbody tr:nth-child(even) {
+  background-color: #eff6ff;          /* soft blue row */
+}
+
+table.player-details tfoot td {
+  background-color: #dbeafe;          /* same as header for balance */
+  font-weight: 600;
+}

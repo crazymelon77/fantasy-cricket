@@ -5,6 +5,17 @@ import {
   collection, getDocs, doc, getDoc, query, orderBy
 } from "firebase/firestore";
 
+async function loadMatchStats(tId, sId, mId) {
+  const statsSnap = await getDocs(
+    collection(db, "tournaments", tId, "stages", sId, "matches", mId, "stats")
+  );
+  const stats = {};
+  statsSnap.forEach((d) => {
+    stats[d.id] = d.data()?.points || {};
+  });
+  return stats; // { playerId: { total, batting, bowling, ... } }
+}
+
 const Leaderboard = () => {
   const { id: tournamentId } = useParams();
   const navigate = useNavigate();
@@ -40,18 +51,35 @@ const Leaderboard = () => {
     }));
   };
 
-  const toggleMatchExpand = (uid, stageId, matchId) => {
-    setExpandedMatches(prev => ({
-      ...prev,
-      [uid]: {
-        ...(prev[uid] || {}),
-        [stageId]: {
-          ...(prev[uid]?.[stageId] || {}),
-          [matchId]: !prev[uid]?.[stageId]?.[matchId]
-        }
-      }
-    }));
-  };
+const toggleMatchExpand = async (uid, stageId, matchId) => {
+  const isOpen = expandedMatches[uid]?.[stageId]?.[matchId];
+
+  // open → fetch player points from stats only once
+  if (!isOpen) {
+    const stats = await loadMatchStats(tournamentId, stageId, matchId);
+    setPlayerMatchTotals((prev) => {
+      const next = { ...prev };
+      if (!next[stageId]) next[stageId] = {};
+      Object.entries(stats).forEach(([pid, pts]) => {
+        if (!next[stageId][pid]) next[stageId][pid] = {};
+        next[stageId][pid][matchId] = pts.total ?? 0;
+      });
+      return next;
+    });
+  }
+
+  // toggle expansion state
+  setExpandedMatches((prev) => ({
+    ...prev,
+    [uid]: {
+      ...(prev[uid] || {}),
+      [stageId]: {
+        ...(prev[uid]?.[stageId] || {}),
+        [matchId]: !isOpen,
+      },
+    },
+  }));
+};
 
   const colCount = 2 + stages.length; // Manager + per-stage + Total
 
@@ -140,16 +168,28 @@ const Leaderboard = () => {
               const t2Snap = await getDoc(doc(tourRef, "stages", s.id, "teams", md.team2));
               team2Name = t2Snap.exists() ? (t2Snap.data().name || "TBD") : "TBD";
             }
-            matchMetaByStage[s.id][mId] = { team1Name, team2Name };
+            matchMetaByStage[s.id][mId] = { team1Name, team2Name, scored: md.scored ?? false };
 
-            // Stats → per-player points for this match
-            const statsSnap = await getDocs(collection(tourRef, "stages", s.id, "matches", mId, "stats"));
-            statsSnap.forEach(st => {
-              const pid = st.id;
-              const pts = (st.data()?.points?.total) ?? 0;
-              if (!matchTotalsByStage[s.id][pid]) matchTotalsByStage[s.id][pid] = {};
-              matchTotalsByStage[s.id][pid][mId] = pts;
-            });
+			// ⚡ Optimized: use cached totalPoints but skip unscored matches
+			const matchRef = doc(tourRef, "stages", s.id, "matches", mId);
+			const matchSnap = await getDoc(matchRef);
+			const mdLeaderboard = matchSnap.data() || {};
+			if (mdLeaderboard.scored) {
+			  const xisSnap = await getDocs(
+				collection(tourRef, "stages", s.id, "matches", mId, "11s")
+			  );
+
+			  xisSnap.forEach((xiDoc) => {
+				const xi = xiDoc.data() || {};
+				const uid = xiDoc.id;
+				const totalPoints = Number.isFinite(xi.totalPoints) ? xi.totalPoints : 0;
+
+				if (!matchTotalsByStage[s.id][uid]) matchTotalsByStage[s.id][uid] = {};
+				matchTotalsByStage[s.id][uid][mId] = totalPoints;
+			  });
+			}
+
+
 
             // Locked squads for this match (per user)
             squadsByStage[s.id][mId] = {};
@@ -192,14 +232,8 @@ const Leaderboard = () => {
 
         let stageSum = 0;
         for (const mId of allMatchIds) {
-          const locked = userSquadsByMatch[mId]?.[u.uid] || []; // array of playerIds locked for this match
-          if (locked.length === 0) continue; // no recorded squad for this user+match
-
-          let matchTotal = 0;
-          for (const pid of locked) {
-            matchTotal += matchMap[pid]?.[mId] || 0;
-          }
-          stageSum += matchTotal;
+          const userTotal = playerMatchTotals[s.id]?.[u.uid]?.[mId] ?? 0;
+          stageSum += userTotal;
         }
 
         stageTotals[s.id] = stageSum;
@@ -243,7 +277,7 @@ const Leaderboard = () => {
         </div>
       </div>
 
-      <table className="score-table">
+      <table className="main-leaderboard">
         <thead>
           <tr>
             <th onClick={() => headerClick("user")} style={{cursor:"pointer"}}>
@@ -302,21 +336,23 @@ const Leaderboard = () => {
                 Object.values(matchMap).forEach(perMatch => {
                   Object.keys(perMatch || {}).forEach(mId => allMatchIds.add(mId));
                 });
-                const matchRows = Array.from(allMatchIds).map(mId => {
-                  const locked = userSquadsByMatch[mId]?.[r.uid] || [];
-                  let matchTotal = 0;
-                  for (const pid of locked) matchTotal += matchMap[pid]?.[mId] || 0;
-                  return { id: mId, total: matchTotal };
-                }).sort((a,b)=> a.id.localeCompare(b.id));
+                const matchRows = Array.from(allMatchIds)
+				  .filter(mId => matchMeta[s.id]?.[mId]?.scored)
+				  .map(mId => {
+					// use the cached totalPoints per user per match
+					const matchTotal = playerMatchTotals[s.id]?.[r.uid]?.[mId] ?? 0;
+					return { id: mId, total: matchTotal };
+				  })
+				  .sort((a, b) => a.id.localeCompare(b.id));
 
                 return (
                   <tr key={`${r.uid}-${s.id}-stage`}>
-                    <td colSpan={colCount} style={{ background:"#f9fafb" }}>
+                    <td colSpan={colCount} className="highlight-matches">
                       <div className="p-2">
                         <div className="font-semibold mb-2">
                           Matches for <span className="underline">{s.name}</span>
                         </div>
-                        <table className="score-table text-sm">
+                        <table className="match-breakdown">
                           <thead>
                             <tr>
                               <th>Match</th>
@@ -358,7 +394,7 @@ const Leaderboard = () => {
                                   {expandedMatches[r.uid]?.[s.id]?.[m.id] && hasLocked && (
                                     <tr>
                                       <td colSpan={3} style={{ background:"#f3f4f6" }}>
-                                        <table className="score-table text-xs" style={{marginLeft:"1rem", maxWidth:"640px"}}>
+                                        <table className="player-details" style={{marginLeft:"1rem", maxWidth:"640px"}}>
                                           <thead>
                                             <tr>
                                               <th>Player</th>
