@@ -8,6 +8,8 @@ import JoinTournament from "./components/JoinTournament";
 import Leaderboard from "./components/Leaderboard";
 import "./styles.css";
 import EnterMatchResults from "./components/EnterMatchResults";
+import MatchDetails from "./components/MatchDetails";
+
 
 
 function App() {
@@ -21,7 +23,10 @@ function App() {
           <Route path="/edit-tournament/:tournamentId" element={<EditTournament />} />
 		  <Route path="/tournament/:id" element={<JoinTournament />} />
 		  <Route path="/tournament/:tId/stage/:sId/match/:mId/results" element={<EnterMatchResults />} />
+		  <Route path="/tournament/:tId/stage/:sId/match/:mId/scorecard" element={<MatchDetails />} />
 		  <Route path="/tournament/:id/leaderboard" element={<Leaderboard />} />
+		  
+
 
 
 

@@ -374,7 +374,17 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
                               return (
                                 <React.Fragment key={m.id}>
                                   <tr>
-                                    <td>{label}</td>
+                                    <td>
+									  {label}
+									  <button
+										style={{ marginLeft: "8px" }}
+										onClick={() =>
+										  navigate(`/tournament/${tournamentId}/stage/${s.id}/match/${m.id}/scorecard`)
+										}
+									  >
+										Scorecard
+									  </button>
+									</td>
                                     <td style={{textAlign:"right"}}>{hasLocked ? m.total : "-"}</td>
                                     <td style={{textAlign:"center"}}>
                                       {hasLocked ? (

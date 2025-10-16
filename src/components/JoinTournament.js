@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { db, auth } from "../firebase";
 import { query, orderBy } from "firebase/firestore";
+import PlayerBreakdown from "./PlayerBreakdown";
+
 
 
 import {
@@ -40,9 +42,21 @@ const JoinTournament = () => {
   
   const [xiByMatch, setXiByMatch] = useState({});        // { [matchId]: string[] of playerIds }
   const [xiTotalByMatch, setXiTotalByMatch] = useState({}); // { [matchId]: number }
+  const [expandedPlayer, setExpandedPlayer] = React.useState(null);
+  
+  const [playerSort, setPlayerSort] = useState({ field: "total", dir: "desc" });
 
+  const handlePlayerSort = (field) => {
+    setPlayerSort((prev) => {
+      const dir = prev.field === field && prev.dir === "asc" ? "desc" : "asc";
+      return { field, dir };
+    });
+  };
   
-  
+  const togglePlayerDetails = (playerId) => {
+    setExpandedPlayer((prev) => (prev === playerId ? null : playerId));
+  };
+
   const [searchParams] = useSearchParams();
   useEffect(() => {
     const stageToExpand = searchParams.get("stage");
@@ -699,16 +713,37 @@ const JoinTournament = () => {
 						  if (!stat) return null;
 						  const pts = stat.points || {};
 						  totalPoints += pts.total ?? 0;
-						  return (
-							<tr key={pid}>
-							  <td className="border px-2 py-1">{resolvePlayer(pid)?.playerName}</td>
-							  <td className="border px-2 py-1 text-right">{pts.batting ?? 0}</td>
-							  <td className="border px-2 py-1 text-right">{pts.bowling ?? 0}</td>
-							  <td className="border px-2 py-1 text-right">{pts.fielding ?? 0}</td>
-							  <td className="border px-2 py-1 text-right">{pts.general ?? 0}</td>
-							  <td className="border px-2 py-1 text-right font-semibold">{pts.total ?? 0}</td>
-							</tr>
-						  );
+							return (
+							  <React.Fragment key={pid}>
+								<tr>
+								  <td className="border px-2 py-1">{resolvePlayer(pid)?.playerName}</td>
+								  <td className="border px-2 py-1 text-right">{pts.batting ?? 0}</td>
+								  <td className="border px-2 py-1 text-right">{pts.bowling ?? 0}</td>
+								  <td className="border px-2 py-1 text-right">{pts.fielding ?? 0}</td>
+								  <td className="border px-2 py-1 text-right">{pts.general ?? 0}</td>
+								  <td className="border px-2 py-1 text-right font-semibold">{pts.total ?? 0}</td>
+								  <td className="border px-2 py-1 text-center">
+									<button
+									  className="btn-secondary"
+									  onClick={() => togglePlayerDetails(pid)}
+									>
+									  {expandedPlayer === pid ? "Hide" : "Details"}
+									</button>
+								  </td>
+								</tr>
+
+								{expandedPlayer === pid && (
+								  <tr>
+									<td colSpan={7} className="bg-gray-50 p-2">
+									  <PlayerBreakdown
+										p={{ id: pid, ...resolvePlayer(pid), points: pts }}
+										scoring={stage.scoring}
+									  />
+									</td>
+								  </tr>
+								)}
+							  </React.Fragment>
+							);
 						});
 
 					  const team1Name =
@@ -749,20 +784,34 @@ const JoinTournament = () => {
  							    const isScored = total > 0;
 							  
  							    if (isScored) {
- 							  	return (
- 							  	  <>
- 							  		<span className="text-sm text-gray-600 ml-1">
- 							  		  (match total: {total})
- 							  		</span>
- 							  		<button
- 							  		  onClick={() => toggleMatchDetails(match.id)}
- 							  		  className="btn-secondary"
- 							  		>
- 							  		  {expandedMatches[match.id] ? "Hide Details" : "Show Details"}
- 							  		</button>
- 							  	  </>
- 							  	);
- 							    } else if (isBeforeCutoff) {
+								  return (
+								 	 <>
+								 	 <span className="text-sm text-gray-600 ml-1">
+								 		 (match total: {total})
+								 	 </span>
+								  
+								 	 
+								  
+								 	 <button
+								 		 onClick={() => toggleMatchDetails(match.id)}
+								 		 className="btn-secondary ml-2"
+								 	 >
+								 		 {expandedMatches[match.id] ? "Hide Match XI" : "Show Match XI"}
+								 	 </button>
+									 
+									 {/* ✅ New Scorecard button */}
+								 	 <button
+								 		 
+								 		 onClick={() =>
+								 		 navigate(`/tournament/${id}/stage/${stage.id}/match/${match.id}/scorecard`)
+								 		 }
+								 	 >
+								 		 See Full Scorecard
+								 	 </button>
+									 
+								 	 </>
+								  );
+								} else if (isBeforeCutoff) {
  							  	return (
  							  	  <span className="text-sm text-gray-600 ml-1">
  							  		(changes allowed till <b>{cutoffTime.toLocaleString()}</b>)
@@ -816,29 +865,118 @@ const JoinTournament = () => {
 							)}
 
 						  {isScored && expandedMatches[match.id] && (
-
-
-
 							<div className="mt-2">
+
 							  <table className="score-table text-sm border border-gray-300 rounded w-auto">
 								<thead className="bg-gray-100">
 								  <tr>
-									<th className="border px-2 py-1 text-left">Player</th>
-									<th className="border px-2 py-1 text-right">Bat</th>
-									<th className="border px-2 py-1 text-right">Bowl</th>
-									<th className="border px-2 py-1 text-right">Field</th>
-									<th className="border px-2 py-1 text-right">Gen</th>
-									<th className="border px-2 py-1 text-right">Total</th>
+									<th 
+									  className="border px-2 py-1 text-left cursor-pointer"
+									  onClick={() => handlePlayerSort("name")}
+									>
+									  Player {playerSort.field === "name" && (playerSort.dir === "asc" ? "▲" : "▼")}
+									</th>
+									<th 
+									  className="border px-2 py-1 text-right cursor-pointer"
+									  onClick={() => handlePlayerSort("batting")}
+									>
+									  Bat {playerSort.field === "batting" && (playerSort.dir === "asc" ? "▲" : "▼")}
+									</th>
+									<th 
+									  className="border px-2 py-1 text-right cursor-pointer"
+									  onClick={() => handlePlayerSort("bowling")}
+									>
+									  Bowl {playerSort.field === "bowling" && (playerSort.dir === "asc" ? "▲" : "▼")}
+									</th>
+									<th 
+									  className="border px-2 py-1 text-right cursor-pointer"
+									  onClick={() => handlePlayerSort("fielding")}
+									>
+									  Field {playerSort.field === "fielding" && (playerSort.dir === "asc" ? "▲" : "▼")}
+									</th>
+									<th 
+									  className="border px-2 py-1 text-right cursor-pointer"
+									  onClick={() => handlePlayerSort("general")}
+									>
+									  Gen {playerSort.field === "general" && (playerSort.dir === "asc" ? "▲" : "▼")}
+									</th>
+									<th 
+									  className="border px-2 py-1 text-right cursor-pointer"
+									  onClick={() => handlePlayerSort("total")}
+									>
+									  Total {playerSort.field === "total" && (playerSort.dir === "asc" ? "▲" : "▼")}
+									</th>
+									<th className="border px-2 py-1 text-center">Details</th>
 								  </tr>
 								</thead>
-								<tbody>
-								  {playerRows.filter(Boolean).map((row, i) =>
-									React.cloneElement(row, { key: i })
-								  )}
-								</tbody>
+
+<tbody>
+  {xi
+    .map(pid => {
+      const stat = match.players.find((mp) => mp.id === pid);
+      if (!stat) return null;
+      const pts = stat.points || {};
+      return { pid, stat, pts, player: resolvePlayer(pid) };
+    })
+    .filter(item => item !== null)
+    .sort((a, b) => {
+      const { field, dir } = playerSort;
+      let valA, valB;
+      
+      if (field === "total") {
+        valA = a.pts.total ?? 0;
+        valB = b.pts.total ?? 0;
+      } else if (["batting", "bowling", "fielding", "general"].includes(field)) {
+        valA = a.pts[field] ?? 0;
+        valB = b.pts[field] ?? 0;
+      } else if (field === "name") {
+        valA = a.player?.playerName || "";
+        valB = b.player?.playerName || "";
+      }
+      
+      if (valA < valB) return dir === "asc" ? -1 : 1;
+      if (valA > valB) return dir === "asc" ? 1 : -1;
+      return 0;
+    })
+    .map(({ pid, stat, pts, player }) => {
+      return (
+        <React.Fragment key={pid}>
+          <tr>
+            <td className="border px-2 py-1">{player?.playerName}</td>
+            <td className="border px-2 py-1 text-right">{pts.batting ?? 0}</td>
+            <td className="border px-2 py-1 text-right">{pts.bowling ?? 0}</td>
+            <td className="border px-2 py-1 text-right">{pts.fielding ?? 0}</td>
+            <td className="border px-2 py-1 text-right">{pts.general ?? 0}</td>
+            <td className="border px-2 py-1 text-right font-semibold">
+              {pts.total ?? 0}
+            </td>
+            <td className="border px-2 py-1 text-center">
+              <button
+                className="btn-secondary"
+                onClick={() => togglePlayerDetails(pid)}
+              >
+                {expandedPlayer === pid ? "Hide" : "Details"}
+              </button>
+            </td>
+          </tr>
+
+          {expandedPlayer === pid && (
+            <tr>
+              <td colSpan={7} className="bg-gray-50 p-2">
+                <PlayerBreakdown
+                  p={{ id: pid, ...stat, points: pts }}
+                  scoring={stage.scoring}
+                />
+              </td>
+            </tr>
+          )}
+        </React.Fragment>
+      );
+    })}
+</tbody>
 								<tfoot>
 								  <tr>
-									<td className="text-right font-semibold" colSpan="5">
+									<td className="text-right font-semibold" colSpan="6">
 									  Match Total
 									</td>
 									<td className="text-right font-semibold">
