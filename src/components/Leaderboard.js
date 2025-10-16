@@ -51,35 +51,55 @@ const Leaderboard = () => {
     }));
   };
 
-const toggleMatchExpand = async (uid, stageId, matchId) => {
-  const isOpen = expandedMatches[uid]?.[stageId]?.[matchId];
-
-  // open → fetch player points from stats only once
-  if (!isOpen) {
-    const stats = await loadMatchStats(tournamentId, stageId, matchId);
-    setPlayerMatchTotals((prev) => {
-      const next = { ...prev };
-      if (!next[stageId]) next[stageId] = {};
-      Object.entries(stats).forEach(([pid, pts]) => {
-        if (!next[stageId][pid]) next[stageId][pid] = {};
-        next[stageId][pid][matchId] = pts.total ?? 0;
+  const toggleMatchExpand = async (uid, stageId, matchId) => {
+    const isOpen = expandedMatches[uid]?.[stageId]?.[matchId];
+  
+    if (!isOpen) {
+      // ✅ Load match squad only when expanding
+      const tourRef = doc(db, "tournaments", tournamentId);
+      const squadsSnap = await getDocs(
+        collection(tourRef, "stages", stageId, "matches", matchId, "11s")
+      );
+      
+      setManagerMatchSquads(prev => {
+        const next = { ...prev };
+        if (!next[stageId]) next[stageId] = {};
+        if (!next[stageId][matchId]) next[stageId][matchId] = {};
+        
+        squadsSnap.forEach(sqDoc => {
+          const d = sqDoc.data() || {};
+          const players = Array.isArray(d.team) ? d.team : [];
+          next[stageId][matchId][sqDoc.id] = players;
+        });
+        
+        return next;
       });
-      return next;
-    });
-  }
-
-  // toggle expansion state
-  setExpandedMatches((prev) => ({
-    ...prev,
-    [uid]: {
-      ...(prev[uid] || {}),
-      [stageId]: {
-        ...(prev[uid]?.[stageId] || {}),
-        [matchId]: !isOpen,
+  
+      // ✅ Load individual player stats only when expanding
+      const stats = await loadMatchStats(tournamentId, stageId, matchId);
+      setPlayerMatchTotals((prev) => {
+        const next = { ...prev };
+        if (!next[stageId]) next[stageId] = {};
+        Object.entries(stats).forEach(([pid, pts]) => {
+          if (!next[stageId][pid]) next[stageId][pid] = {};
+          next[stageId][pid][matchId] = pts.total ?? 0;
+        });
+        return next;
+      });
+    }
+  
+    // toggle expansion state
+    setExpandedMatches((prev) => ({
+      ...prev,
+      [uid]: {
+        ...(prev[uid] || {}),
+        [stageId]: {
+          ...(prev[uid]?.[stageId] || {}),
+          [matchId]: !isOpen,
+        },
       },
-    },
-  }));
-};
+    }));
+  };
 
   const colCount = 2 + stages.length; // Manager + per-stage + Total
 
@@ -100,12 +120,12 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
           return;
         }
         setTournament({ id: tourSnap.id, ...tourSnap.data() });
-
+  
         // Stages
         const sSnap = await getDocs(query(collection(tourRef, "stages"), orderBy("order", "asc")));
         const sList = sSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         setStages(sList);
-
+  
         // Participants (from user_teams)
         const allUsersSnap = await getDocs(collection(db, "user_teams"));
         const users = [];
@@ -121,60 +141,54 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
           });
         });
         setParticipants(users);
-
-        // Per-stage player info, per-player match totals, per-match squads, and match labels
+  
+        // ✅ OPTIMIZED: Only load minimal match data
         const infoByStage = {};
         const matchTotalsByStage = {};
-        const squadsByStage = {};
         const matchMetaByStage = {};
+  
+		for (const s of sList) {
+		  // ✅ Load all teams ONCE for this stage
+		  const teamsSnap = await getDocs(collection(tourRef, "stages", s.id, "teams"));
+		  const teamsById = {}; // Cache teams by ID
+		  const infoMap = {};
+		  
+		  for (const tDoc of teamsSnap.docs) {
+			const team = { id: tDoc.id, ...(tDoc.data() || {}) };
+			teamsById[team.id] = team; // ✅ Store for quick lookup
+			
+			const playersSnap = await getDocs(collection(tourRef, "stages", s.id, "teams", team.id, "players"));
+			playersSnap.forEach(p => {
+			  const pd = p.data() || {};
+			  infoMap[p.id] = {
+				name: pd.playerName || p.id,
+				role: pd.role || "",
+				team: team.name || ""
+			  };
+			});
+		  }
+		  infoByStage[s.id] = infoMap;
 
-        for (const s of sList) {
-          // Player info
-          const teamsSnap = await getDocs(collection(tourRef, "stages", s.id, "teams"));
-          const infoMap = {};
-          for (const tDoc of teamsSnap.docs) {
-            const team = { id: tDoc.id, ...(tDoc.data() || {}) };
-            const playersSnap = await getDocs(collection(tourRef, "stages", s.id, "teams", team.id, "players"));
-            playersSnap.forEach(p => {
-              const pd = p.data() || {};
-              infoMap[p.id] = {
-                name: pd.playerName || p.id,
-                role: pd.role || "",
-                team: team.name || ""
-              };
-            });
-          }
-          infoByStage[s.id] = infoMap;
+		  // ✅ Only load match metadata + cached totals (NOT individual player stats)
+		  matchTotalsByStage[s.id] = {};
+		  matchMetaByStage[s.id] = {};
 
-          // Matches: points + meta + per-match squads
-          matchTotalsByStage[s.id] = {};
-          squadsByStage[s.id] = {};
-          matchMetaByStage[s.id] = {};
+		  const matchesSnap = await getDocs(
+			query(collection(tourRef, "stages", s.id, "matches"), orderBy("order", "asc"))
+		  );
+		  
+		  for (const m of matchesSnap.docs) {
+			const mId = m.id;
+			const md = m.data() || {};
 
-          const matchesSnap = await getDocs(
-			  query(collection(tourRef, "stages", s.id, "matches"), orderBy("order", "asc"))
-			);
-          for (const m of matchesSnap.docs) {
-            const mId = m.id;
-            const md = m.data() || {};
+			// ✅ Lookup team names from cache (no extra DB reads!)
+			const team1Name = teamsById[md.team1]?.name || md.team1 || "TBD";
+			const team2Name = teamsById[md.team2]?.name || md.team2 || "TBD";
+			
+			matchMetaByStage[s.id][mId] = { team1Name, team2Name, scored: md.scored ?? false };
 
-            // Team names for label
-            let team1Name = "TBD", team2Name = "TBD";
-            if (md.team1 && md.team1 !== "TBD") {
-              const t1Snap = await getDoc(doc(tourRef, "stages", s.id, "teams", md.team1));
-              team1Name = t1Snap.exists() ? (t1Snap.data().name || "TBD") : "TBD";
-            }
-            if (md.team2 && md.team2 !== "TBD") {
-              const t2Snap = await getDoc(doc(tourRef, "stages", s.id, "teams", md.team2));
-              team2Name = t2Snap.exists() ? (t2Snap.data().name || "TBD") : "TBD";
-            }
-            matchMetaByStage[s.id][mId] = { team1Name, team2Name, scored: md.scored ?? false };
-
-			// ⚡ Optimized: use cached totalPoints but skip unscored matches
-			const matchRef = doc(tourRef, "stages", s.id, "matches", mId);
-			const matchSnap = await getDoc(matchRef);
-			const mdLeaderboard = matchSnap.data() || {};
-			if (mdLeaderboard.scored) {
+			// ✅ Only load cached totalPoints from 11s docs (skip stats entirely)
+			if (md.scored) {
 			  const xisSnap = await getDocs(
 				collection(tourRef, "stages", s.id, "matches", mId, "11s")
 			  );
@@ -188,66 +202,44 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
 				matchTotalsByStage[s.id][uid][mId] = totalPoints;
 			  });
 			}
-
-
-
-            // Locked squads for this match (per user)
-            squadsByStage[s.id][mId] = {};
-            const squadsSnap = await getDocs(collection(tourRef, "stages", s.id, "matches", mId, "11s"));
-            squadsSnap.forEach(sqDoc => {
-              const d = sqDoc.data() || {};
-              const players = Array.isArray(d.team) ? d.team : [];
-              squadsByStage[s.id][mId][sqDoc.id] = players; // key is uid
-            });
-          }
-        }
-
+		  }
+		}  
         setPlayerInfoByStage(infoByStage);
         setPlayerMatchTotals(matchTotalsByStage);
-        setManagerMatchSquads(squadsByStage);
         setMatchMeta(matchMetaByStage);
-
+        // ✅ squadsByStage is now loaded on-demand, so don't set it here
+        setManagerMatchSquads({}); // Initialize empty
+  
       } finally {
         setLoading(false);
       }
     };
     load();
-  }, [tournamentId, navigate, db]);
+  }, [tournamentId, navigate]);
 
   // Build leaderboard rows (stage total = sum of per-match totals using that match's locked squad)
-  const rows = useMemo(() => {
-    return participants.map(u => {
-      const stageTotals = {};
-      let grand = 0;
+	const rows = useMemo(() => {
+	  return participants.map(u => {
+		const stageTotals = {};
+		let grand = 0;
 
-      for (const s of stages) {
-        const matchMap = playerMatchTotals[s.id] || {};
-        const userSquadsByMatch = managerMatchSquads[s.id] || {};
+		for (const s of stages) {
+		  // ✅ Just sum up this user's matches directly
+		  const userMatches = playerMatchTotals[s.id]?.[u.uid] || {};
+		  const stageSum = Object.values(userMatches).reduce((sum, pts) => sum + pts, 0);
+		  
+		  stageTotals[s.id] = stageSum;
+		  grand += stageSum;
+		}
 
-        // Enumerate matches we know about (from matchMap keys)
-        const allMatchIds = new Set();
-        Object.values(matchMap).forEach(perMatch => {
-          Object.keys(perMatch || {}).forEach(mId => allMatchIds.add(mId));
-        });
-
-        let stageSum = 0;
-        for (const mId of allMatchIds) {
-          const userTotal = playerMatchTotals[s.id]?.[u.uid]?.[mId] ?? 0;
-          stageSum += userTotal;
-        }
-
-        stageTotals[s.id] = stageSum;
-        grand += stageSum;
-      }
-
-      return {
-        uid: u.uid,
-        label: (u.displayName || u.email || u.uid).replace(/^"|"$/g, ""),
-        perStage: stageTotals,
-        total: grand
-      };
-    });
-  }, [participants, stages, playerMatchTotals, managerMatchSquads]);
+		return {
+		  uid: u.uid,
+		  label: (u.displayName || u.email || u.uid).replace(/^"|"$/g, ""),
+		  perStage: stageTotals,
+		  total: grand
+		};
+	  });
+	}, [participants, stages, playerMatchTotals]);
 
   // Sorting
   const sortedRows = useMemo(() => {
@@ -300,25 +292,25 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
               <tr>
                 <td>{r.label}</td>
                 {stages.map(s => {
-                  const val = r.perStage[s.id] || 0;
+				  const val = r.perStage[s.id] || 0;
 
-                  // consider "has any recorded squad in any match" to allow expansion
-                  const userSquadsByMatch = managerMatchSquads[s.id] || {};
-                  const anyRecorded = Object.values(userSquadsByMatch).some(byUser => Array.isArray(byUser?.[r.uid]) && byUser[r.uid].length > 0);
+				  // ✅ Show expand button if user has any points in this stage
+				  const hasAnyMatches = (playerMatchTotals[s.id]?.[r.uid] && 
+										 Object.keys(playerMatchTotals[s.id][r.uid]).length > 0);
 
-                  return (
-                    <td key={s.id} style={{textAlign:"right"}}>
-                      {anyRecorded ? (
-                        <button
-                          className="btn-secondary"
-                          onClick={() => toggleStageExpand(r.uid, s.id)}
-                        >
-                          {val} {expandedStages[r.uid]?.[s.id] ? "▲" : "▼"}
-                        </button>
-                      ) : (val || 0)}
-                    </td>
-                  );
-                })}
+				  return (
+					<td key={s.id} style={{textAlign:"right"}}>
+					  {hasAnyMatches ? (
+						<button
+						  className="btn-secondary"
+						  onClick={() => toggleStageExpand(r.uid, s.id)}
+						>
+						  {val} {expandedStages[r.uid]?.[s.id] ? "▲" : "▼"}
+						</button>
+					  ) : (val || 0)}
+					</td>
+				  );
+				})}
                 <td style={{textAlign:"right", fontWeight:"bold"}}>{r.total}</td>
               </tr>
 
@@ -336,11 +328,12 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
                 Object.values(matchMap).forEach(perMatch => {
                   Object.keys(perMatch || {}).forEach(mId => allMatchIds.add(mId));
                 });
-                const matchRows = Array.from(allMatchIds)
+				// ✅ Get match IDs from this user's match totals
+				const userMatchTotals = playerMatchTotals[s.id]?.[r.uid] || {};
+				const matchRows = Object.keys(userMatchTotals)
 				  .filter(mId => matchMeta[s.id]?.[mId]?.scored)
 				  .map(mId => {
-					// use the cached totalPoints per user per match
-					const matchTotal = playerMatchTotals[s.id]?.[r.uid]?.[mId] ?? 0;
+					const matchTotal = userMatchTotals[mId] ?? 0;
 					return { id: mId, total: matchTotal };
 				  })
 				  .sort((a, b) => a.id.localeCompare(b.id));
@@ -368,24 +361,24 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
 								: `Match ${matchIndex}: ${m.id}`;
 
 
-                              const hasLocked = Array.isArray((managerMatchSquads[s.id]?.[m.id] || {})[r.uid]) &&
-                                                (managerMatchSquads[s.id][m.id][r.uid].length > 0);
+								// ✅ User has a locked squad if they have a match total recorded
+								const hasLocked = m.total > 0 || (playerMatchTotals[s.id]?.[r.uid]?.[m.id] != null);
 
-                              return (
-                                <React.Fragment key={m.id}>
-                                  <tr>
-                                    <td>
-									  {label}
-									  <button
-										style={{ marginLeft: "8px" }}
-										onClick={() =>
-										  navigate(`/tournament/${tournamentId}/stage/${s.id}/match/${m.id}/scorecard`)
-										}
-									  >
-										Scorecard
-									  </button>
-									</td>
-                                    <td style={{textAlign:"right"}}>{hasLocked ? m.total : "-"}</td>
+								return (
+								  <React.Fragment key={m.id}>
+									<tr>
+									  <td>
+										{label}
+										<button
+										  style={{ marginLeft: "8px" }}
+										  onClick={() =>
+											navigate(`/tournament/${tournamentId}/stage/${s.id}/match/${m.id}/scorecard`)
+										  }
+										>
+										  Scorecard
+										</button>
+									  </td>
+									  <td style={{textAlign:"right"}}>{m.total}</td>
                                     <td style={{textAlign:"center"}}>
                                       {hasLocked ? (
                                         <button
