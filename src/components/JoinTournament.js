@@ -591,7 +591,7 @@ const JoinTournament = () => {
           {joined ? (
             <button onClick={handleLeave} className="btn-danger">Leave</button>
           ) : (
-            <button onClick={handleJoin} className="bg-green-500 text-white px-4 py-2 rounded">Join</button>
+            <button onClick={handleJoin} className="btn-add">Join</button>
           )}
 		  <button
       onClick={() => navigate(`/tournament/${id}/leaderboard`)}
@@ -1020,8 +1020,9 @@ const JoinTournament = () => {
 				</p> 
 				
 				<p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
-				  <b>Subs used: {(subsUsedFromDB[stage.id] ?? 0) + (subsUsedLive[stage.id] ?? 0)}/{stage.subsAllowed ?? 0}
-					  {" "} | Budget: {total - remaining}/{total}</b>
+				  <b>Subs used: {(subsUsedFromDB[stage.id] ?? 0) + (subsUsedLive[stage.id] ?? 0)}/{stage.subsAllowed ?? 0} 
+					  {" "}({stage.subsAllowed ?? 0 - (subsUsedFromDB[stage.id] ?? 0) + (subsUsedLive[stage.id] ?? 0)} left)
+					{" "} | Budget: {total - remaining}/{total} ({remaining} left)</b>
 				</p>
 				
 				{joined && (
@@ -1073,9 +1074,9 @@ const JoinTournament = () => {
                             <td className="border px-2 py-1">
                               <button
                                 onClick={() => togglePlayer(stage.id, player)}
-                                className="bg-red-500 text-white px-2 py-1 rounded"
+                                className="btn-danger"
                               >
-                                Remove
+                                Drop
                               </button>
                             </td>
                           </tr>
@@ -1175,17 +1176,17 @@ const JoinTournament = () => {
 							  {isSelected ? (
 								<button
 								  onClick={() => togglePlayer(stage.id, p)}
-								  className="bg-red-500 text-white px-2 py-1 rounded"
+								  className="btn-danger"
 								>
-								  Remove
+								  Drop
 								</button>
 							  ) : (
 								<button
 								  onClick={() => togglePlayer(stage.id, p)}
-								  className="bg-green-500 text-white px-2 py-1 rounded"
+								  className="btn-add"
 								  disabled={!joined}
 								>
-								  Add
+								  Pick
 								</button>
 							  )}
 							</td>

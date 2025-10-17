@@ -246,6 +246,25 @@ button.btn-danger:focus {
   box-shadow: 0 0 3px rgba(231, 138, 138, 0.5);
 }
 
+button.btn-add {
+  background-color: #b7e4c7;   /* light green */
+  border: 1px solid #95d5b2;
+  color: #064420;
+}
+
+button.btn-add:hover {
+  background-color: #95d5b2;
+}
+
+button.btn-add:active {
+  background-color: #74c69d;
+}
+
+button.btn-add:focus {
+  outline: none;
+  box-shadow: 0 0 3px rgba(116, 198, 157, 0.5);
+}
+
 /* ===== Leaderboard Table Styles ===== */
 /* ===== Main Leaderboard (Top Level) ===== */
 table.main-leaderboard {

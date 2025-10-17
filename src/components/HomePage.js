@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { auth, getAdminEmails, logOut, db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
-import { collection, getDocs, deleteDoc, doc, getDoc } from "firebase/firestore";
+import { collection, getDocs, deleteDoc, doc, getDoc, setDoc } from "firebase/firestore";
 
 const HomePage = () => {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -124,12 +124,29 @@ const HomePage = () => {
 				  >
 					<span>{tournament.name}</span>
 <div className="flex space-x-2">
-  <button
-    onClick={() => navigate(`/tournament/${tournament.id}`)}
-    className="bg-indigo-500 text-white px-3 py-1 rounded"
-  >
-    {hasJoined ? "View / Update Team" : "Join"}
-  </button>
+<button
+  onClick={async () => {
+    if (!hasJoined) {
+      const user = auth.currentUser;
+      if (user) {
+        await setDoc(
+          doc(db, "user_teams", user.uid),
+          {
+            displayName: user.displayName || "",
+            email: user.email || "",
+            [tournament.id]: { joined: true, stages: {}, budgets: {} },
+          },
+          { merge: true }
+        );
+      }
+    }
+    navigate(`/tournament/${tournament.id}`);
+  }}
+  className="btn-add"
+>
+  {hasJoined ? "View / Update Team" : "Join"}
+</button>
+
 
   {/* 🏆 Leaderboard — visible to everyone */}
   <button
