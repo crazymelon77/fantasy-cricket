@@ -269,7 +269,7 @@ const Leaderboard = () => {
         </div>
       </div>
 
-      <table className="main-leaderboard">
+      <table className="main-leaderboard w-full" style={{ minWidth: "600px" }}>
         <thead>
           <tr>
             <th onClick={() => headerClick("user")} style={{cursor:"pointer"}}>

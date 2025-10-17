@@ -584,7 +584,7 @@ const JoinTournament = () => {
   if (!tournament) return null;
 
   return (
-    <div className="p-6 overflow-y-auto" style={{ maxHeight: "100vh" }}>
+    <div className="p-4 md:p-6 overflow-x-auto overflow-y-auto" style={{ maxHeight: "100vh" }}>
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">{tournament.name}</h1>
         <div className="flex gap-2">
@@ -1047,7 +1047,7 @@ const JoinTournament = () => {
                 {stageSelections.length === 0 ? (
                   <p className="text-sm text-gray-700">No players selected.</p>
                 ) : (
-                  <table className="score-table text-sm mt-2">
+                  <table className="score-table text-sm mt-2 w-full min-w-max">
                     <thead className="bg-gray-100">
                       <tr>
                         <th className="border px-2 py-1">Name</th>
@@ -1087,7 +1087,7 @@ const JoinTournament = () => {
                 )}
                 {/* Available Players */}
                 <h3 className="font-semibold mb-2">Available Players</h3>
-                <table className="score-table text-sm mt-2">
+                <table className="score-table text-sm mt-2 w-full min-w-max">
    				  <thead className="bg-gray-100">
    				    <tr>
    				    	<th
