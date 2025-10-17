@@ -261,16 +261,24 @@ const Leaderboard = () => {
   if (!tournament) return null;
 
   return (
-    <div className="p-4 overflow-x-auto overflow-y-auto" style={{ maxHeight: "90vh" }}>
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">{tournament.name} — Leaderboard</h1>
-        <div className="flex gap-2">
-          <button className="bg-gray-500 text-white px-3 py-1 rounded" onClick={() => navigate(-1)}>Back</button>
-        </div>
-      </div>
-
-      <table className="main-leaderboard w-full" style={{ minWidth: "600px" }}>
-        <thead>
+    <div className="w-full overflow-x-hidden">
+      <div className="w-full overflow-y-auto" style={{ maxHeight: "90vh" }}>
+        <div className="p-2 md:p-4 min-w-0">
+          
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+            <h1 className="text-lg sm:text-xl md:text-2xl font-bold break-words">
+              {tournament.name} — Leaderboard
+            </h1>
+            <button 
+              className="bg-gray-500 text-white px-3 py-1 rounded whitespace-nowrap flex-shrink-0" 
+              onClick={() => navigate(-1)}
+            >
+              Back
+            </button>
+          </div>
+  
+          <div className="w-full overflow-x-auto">
+            <table className="main-leaderboard" style={{ width: "100%", minWidth: "500px" }}>        <thead>
           <tr>
             <th onClick={() => headerClick("user")} style={{cursor:"pointer"}}>
               Manager {sort.key==="user" ? (sort.dir==="asc"?"▲":"▼"):""}
@@ -442,10 +450,12 @@ const Leaderboard = () => {
               })}
             </React.Fragment>
           ))}
-        </tbody>
+		</tbody>
       </table>
+        </div>
+      </div>
     </div>
-  );
+  </div>
+);
 };
-
 export default Leaderboard;
