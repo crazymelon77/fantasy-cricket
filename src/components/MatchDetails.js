@@ -144,10 +144,10 @@ const MatchDetails = () => {
         <p>Loading match details...</p>
       ) : (
         <div
-          className="p-3 overflow-x-auto overflow-y-auto"
-          style={{ maxHeight: "85vh" }}
+          className="p-3 overflow-x-auto"
+          style={{ maxHeight: "85vh", width: "100%" }}
         >
-          <table className="score-table mt-3">
+          <table className="score-table mt-3 w-full" style={{ minWidth: "100%" }}>
             <thead>
 			  <tr>
 				<th

@@ -584,7 +584,8 @@ const JoinTournament = () => {
   if (!tournament) return null;
 
   return (
-    <div className="p-4 md:p-6 overflow-x-auto overflow-y-auto" style={{ maxHeight: "100vh" }}>
+    <div className="join-tournament-container p-4 md:p-6" style={{ maxHeight: "100vh", overflowX: "auto", overflowY: "auto", width: "100%" }}>
+
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">{tournament.name}</h1>
         <div className="flex gap-2">
