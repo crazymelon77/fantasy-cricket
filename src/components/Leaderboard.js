@@ -261,7 +261,7 @@ const Leaderboard = () => {
   if (!tournament) return null;
 
   return (
-    <div className="w-full overflow-x-hidden">
+    <div className="w-full overflow-x-auto">
       <div className="w-full overflow-y-auto" style={{ maxHeight: "90vh" }}>
         <div className="p-2 md:p-4 min-w-0">
           
@@ -277,7 +277,7 @@ const Leaderboard = () => {
             </button>
           </div>
   
-          <div className="w-full overflow-x-auto">
+          <div className="main-leaderboard-container w-full overflow-x-auto">
             <table className="main-leaderboard" style={{ width: "100%", minWidth: "500px" }}>        <thead>
           <tr>
             <th onClick={() => headerClick("user")} style={{cursor:"pointer"}}>

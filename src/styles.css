@@ -362,3 +362,16 @@ table.player-details tfoot td {
   background-color: #dbeafe;          /* same as header for balance */
   font-weight: 600;
 }
+
+@media (max-width: 640px) {
+  .main-leaderboard {
+    font-size: 0.8rem;
+    min-width: 600px;
+  }
+
+  /* Add breathing room and prevent edge clipping */
+  .main-leaderboard-container {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
