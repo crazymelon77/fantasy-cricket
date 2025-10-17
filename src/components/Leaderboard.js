@@ -278,7 +278,7 @@ const Leaderboard = () => {
           </div>
   
           <div className="main-leaderboard-container w-full overflow-x-auto">
-            <table className="main-leaderboard" style={{ width: "100%", minWidth: "500px" }}>        <thead>
+            <table className="main-leaderboard w-full" style={{ minWidth: "100%" }}>        <thead>
           <tr>
             <th onClick={() => headerClick("user")} style={{cursor:"pointer"}}>
               Manager {sort.key==="user" ? (sort.dir==="asc"?"▲":"▼"):""}
