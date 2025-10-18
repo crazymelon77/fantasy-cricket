@@ -663,7 +663,7 @@ const JoinTournament = () => {
 
 				<p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
 				  <b>Role Composition:</b> <br />
-				  {batsmen} Batsmen | {bowlers} Bowlers | {allRounders} All Rounders | Max {" "}{roleComp.sameTeamMax ?? 0} from same team
+				  {roleComp.batsman ?? 0} Batsmen | {roleComp.bowler ?? 0} Bowlers | {roleComp.allRounder ?? 0} All Rounders | Max {" "}{roleComp.sameTeamMax ?? 0} from same team
 				  <br />
 				  11 Total Players
 				</p> 
