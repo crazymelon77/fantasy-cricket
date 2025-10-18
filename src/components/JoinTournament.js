@@ -1021,8 +1021,11 @@ const JoinTournament = () => {
 				</p> 
 				
 				<p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
-				  <b>Subs used: {(subsUsedFromDB[stage.id] ?? 0) + (subsUsedLive[stage.id] ?? 0)}/{stage.subsAllowed ?? 0} 
-					  {" "}({stage.subsAllowed ?? 0 - (subsUsedFromDB[stage.id] ?? 0) + (subsUsedLive[stage.id] ?? 0)} left)
+				  <b>
+  Subs used: {(subsUsedFromDB[stage.id] ?? 0) + (subsUsedLive[stage.id] ?? 0)}/{stage.subsAllowed ?? 0}{" "}
+  ({(stage.subsAllowed ?? 0) - ((subsUsedFromDB[stage.id] ?? 0) + (subsUsedLive[stage.id] ?? 0))} left)
+
+
 					{" "} | Budget: {total - remaining}/{total} ({remaining} left)</b>
 				</p>
 				
