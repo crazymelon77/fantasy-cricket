@@ -289,6 +289,95 @@ const JoinTournament = () => {
 	setSubsUsedLive((prev) => ({ ...prev, [stageId]: 0 }));
 
   };
+  
+  const handleGenerateRandomTeam = async (stageId) => {
+  const stage = stages.find((s) => s.id === stageId);
+  if (!stage) return;
+
+  // 🚫 Case 1: already has a saved team
+  if ((savedPlayers[stageId] || []).length > 0) {
+    alert("You already have a saved team. Cannot randomize.");
+    return;
+  }
+
+  const roleComp = stage.roleComposition || {};
+  const budget = stage.budget || 0;
+  const sameTeamMax = roleComp.sameTeamMax || 11;
+
+  // 🔹 Get all players in this stage
+  const allPlayers = (teamsByStage[stageId] || [])
+    .flatMap((team) => playersByTeam[team.id] || [])
+    .filter(Boolean);
+
+  // 🔹 Group by role
+  const batsmen = allPlayers.filter(p => p.role === "Batsman");
+  const bowlers = allPlayers.filter(p => p.role === "Bowler");
+  const allRounders = allPlayers.filter(p => p.role === "All Rounder");
+
+  const requiredBats = roleComp.batsman ?? 0;
+  const requiredBowl = roleComp.bowler ?? 0;
+  const requiredAllr = roleComp.allRounder ?? 0;
+  const totalRequired = 11;
+
+  // Helper to shuffle an array (Fisher–Yates)
+  const shuffle = (arr) => {
+    const copy = [...arr];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  };
+
+  // 🔹 Shuffle each role group for randomness
+  const pickRandom = (arr, n) => shuffle(arr).slice(0, n);
+  
+    let attempt = 0;
+    let team = [];
+    const maxAttempts = 100;
+  
+    while (attempt < maxAttempts) {
+      attempt++;
+  
+      const chosen = [
+        ...pickRandom(batsmen, requiredBats),
+        ...pickRandom(bowlers, requiredBowl),
+        ...pickRandom(allRounders, requiredAllr),
+      ];
+  
+      // Fill remaining slots randomly if < 11
+      let remaining = totalRequired - chosen.length;
+      if (remaining > 0) {
+        const leftoverPool = allPlayers.filter(p => !chosen.includes(p));
+        chosen.push(...pickRandom(leftoverPool, remaining));
+      }
+  
+      // 🔹 Check constraints
+      const totalCost = chosen.reduce((sum, p) => sum + Number(p.value || 0), 0);
+      const teamCount = {};
+      chosen.forEach(p => {
+        teamCount[p.team] = (teamCount[p.team] || 0) + 1;
+      });
+      const maxFromTeam = Math.max(...Object.values(teamCount));
+  
+      if (totalCost <= budget && maxFromTeam <= sameTeamMax) {
+        team = chosen;
+        break;
+      }
+    }
+  
+    if (team.length !== 11) {
+      alert("Could not generate a valid random team within the budget after several tries.");
+      return;
+    }
+  
+    // ✅ Save locally
+    const selections = team.map((p) => ({ playerId: p.id, teamId: p.team }));
+    setSelectedPlayers((prev) => ({ ...prev, [stageId]: selections }));
+  
+    alert("Random XI generated! Review and click Save Team to confirm.");
+  };
+
 
 
   // save team
@@ -1031,6 +1120,13 @@ const JoinTournament = () => {
 				
 				{joined && (
 				  <div className="flex gap-2 mb-4">
+				  <button
+				    onClick={() => handleGenerateRandomTeam(stage.id)}
+				    className="bg-green-400 text-black px-4 py-2 rounded"
+				  >
+				    Random XI
+				  </button>
+				  
 					<button
 					  onClick={() => handleSaveTeam(stage.id)}
 					  className="bg-blue-500 text-white px-4 py-2 rounded"
