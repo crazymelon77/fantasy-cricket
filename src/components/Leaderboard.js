@@ -383,7 +383,7 @@ const Leaderboard = () => {
 											navigate(`/tournament/${tournamentId}/stage/${s.id}/match/${m.id}/scorecard`)
 										  }
 										>
-										  Scorecard
+										  Full Scorecard
 										</button>
 									  </td>
 									  <td style={{textAlign:"right"}}>{m.total}</td>
@@ -393,7 +393,7 @@ const Leaderboard = () => {
                                           className="btn-secondary"
                                           onClick={() => toggleMatchExpand(r.uid, s.id, m.id)}
                                         >
-                                          {expandedMatches[r.uid]?.[s.id]?.[m.id] ? "Hide" : "Details"}
+                                          {expandedMatches[r.uid]?.[s.id]?.[m.id] ? "Hide" : "Match XI"}
                                         </button>
                                       ) : (
                                         <span className="text-gray-500">No squad recorded</span>
