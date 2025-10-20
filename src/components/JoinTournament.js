@@ -607,6 +607,7 @@ const JoinTournament = () => {
     const batting = [];
     if (bat.perRun != null) batting.push(`${bat.perRun}/run`);
     if (bat.perBallFaced != null) batting.push(`${bat.perBallFaced}/ball faced`);
+	if (bat.perDuck != null) batting.push(`${bat.perDuck}/duck`);
     if (bat.perFour != null) batting.push(`${bat.perFour}/four`);
     if (bat.perSix != null) batting.push(`${bat.perSix}/six`);
     if (bat.notOutBonus != null) batting.push(`${bat.notOutBonus} not out`);

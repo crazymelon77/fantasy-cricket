@@ -471,12 +471,12 @@ const handleImportCSV = async (e) => {
               <input type="number" value={stats[p.id]?.runs ?? 0} onChange={(e) => handleChange(p.id, "runs", e.target.value)} />
               <label>Balls Faced:</label>
               <input type="number" value={stats[p.id]?.ballsFaced ?? 0} onChange={(e) => handleChange(p.id, "ballsFaced", e.target.value)} />
-              <label>4s:</label>
+              <label>Ducks:</label>
+              <input type="number" value={stats[p.id]?.zeros ?? 0} onChange={(e) => handleChange(p.id, "zeros", e.target.value)} />
+			  <label>4s:</label>
               <input type="number" value={stats[p.id]?.fours ?? 0} onChange={(e) => handleChange(p.id, "fours", e.target.value)} />
               <label>6s:</label>
               <input type="number" value={stats[p.id]?.sixes ?? 0} onChange={(e) => handleChange(p.id, "sixes", e.target.value)} />
-              <label>0s:</label>
-              <input type="number" value={stats[p.id]?.zeros ?? 0} onChange={(e) => handleChange(p.id, "zeros", e.target.value)} />
               <label>Not Outs:</label>
               <input type="number" value={stats[p.id]?.notOuts ?? 0} onChange={(e) => handleChange(p.id, "notOuts", e.target.value)} />
 			  <label>Milestones:</label>

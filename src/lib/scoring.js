@@ -5,6 +5,7 @@ export function scoreBatting(bat, s) {
   let pts = 0;
   pts += (bat.perRun ?? 0) * (s.runs ?? 0);
   pts += (bat.perBallFaced ?? 0) * (s.ballsFaced ?? 0);
+  pts += (bat.perDuck ?? 0) * (s.zeros ?? 0);
   pts += (bat.perFour ?? 0) * (s.fours ?? 0);
   pts += (bat.perSix ?? 0) * (s.sixes ?? 0);
   if (s.notOut) pts += (bat.notOutBonus ?? 0);

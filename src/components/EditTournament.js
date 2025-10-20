@@ -186,6 +186,7 @@ const addStage = async () => {
       batting: {
         perRun: 0,
         perBallFaced: 0,
+		perDuck: 0,
         perFour: 0,
         perSix: 0,
         notOutBonus: 0,
@@ -752,6 +753,14 @@ const snapshotMatchXIs = async (tid, sid, mid) => {
                 onChange={(e) =>
                   handleScoringChange(sIdx, ["batting", "perBallFaced"], e.target.value)
                 }
+              />
+            </div>
+            <div>
+              <label>Points per Duck:</label>
+              <input
+                type="number"
+                value={stage.scoring?.batting?.perDuck ?? 0}
+                onChange={(e) => handleScoringChange(sIdx, ["batting", "perDuck"], e.target.value)}
               />
             </div>
             <div>

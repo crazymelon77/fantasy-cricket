@@ -12,7 +12,7 @@ const PlayerBreakdown = ({ p, scoring }) => {
     Batting: [
       ["runs", "Runs Scored"],
       ["ballsFaced", "Balls Faced"],
-      ["dotBalls", "0s"],
+	  ["zeros", "Ducks"],
       ["fours", "4s"],
       ["sixes", "6s"],
       ["milestones", "Milestones Hit"],
@@ -78,6 +78,7 @@ const PlayerBreakdown = ({ p, scoring }) => {
                   const bat = scoring.batting || {};
                   if (key === "runs") pointsEarned = val * (bat.perRun ?? 0);
                   else if (key === "ballsFaced") pointsEarned = val * (bat.perBallFaced ?? 0);
+				  else if (key === "zeros") pointsEarned = val * (bat.perDuck ?? 0);
                   else if (key === "fours") pointsEarned = val * (bat.perFour ?? 0);
                   else if (key === "sixes") pointsEarned = val * (bat.perSix ?? 0);
                   else if (key === "milestones") pointsEarned = val * (bat.bonusEveryXRuns?.points ?? 0);
