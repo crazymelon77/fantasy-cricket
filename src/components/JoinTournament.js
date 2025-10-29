@@ -45,6 +45,13 @@ const JoinTournament = () => {
   const [expandedPlayer, setExpandedPlayer] = React.useState(null);
   
   const [playerSort, setPlayerSort] = useState({ field: "total", dir: "desc" });
+  
+  const recalcBudget = (stageId, team) => {
+    const totalSpent = team.reduce((sum, p) => sum + (p.cost || 0), 0);
+    const budgetLeft = (stages.find(s => s.id === stageId)?.maxBudget ?? 0) - totalSpent;
+  
+    setBudgetLeftByStage(prev => ({ ...prev, [stageId]: budgetLeft }));
+  };
 
   const handlePlayerSort = (field) => {
     setPlayerSort((prev) => {
@@ -278,17 +285,97 @@ const JoinTournament = () => {
     });
   }, [stages, selectedPlayers, playersByTeam]);
   
-  const handleResetTeam = (stageId) => {
+  const handleResetTeam = async (stageId) => {
+    if (!window.confirm("Discard all unsaved changes and revert to your last saved team?")) return;
+  
+    try {
+      const userRef = doc(db, "user_teams", user.uid);
+      const userSnap = await getDoc(userRef);
+  
+      if (!userSnap.exists()) {
+        alert("No saved team found in Firestore.");
+        return;
+      }
+  
+      const userData = userSnap.data() || {};
+      const stageData = userData[id]?.stages?.[stageId] || [];
+      const subsSaved = userData[id]?.subsUsed?.[stageId] ?? 0;
+  
+      // ✅ Reset to what’s truly saved in Firestore
+      setSelectedPlayers(prev => ({ ...prev, [stageId]: stageData }));
+      setSavedPlayers(prev => ({ ...prev, [stageId]: stageData }));
+      setSubsUsedLive(prev => ({ ...prev, [stageId]: 0 }));
+      setSubsUsedFromDB(prev => ({ ...prev, [stageId]: subsSaved }));
 	  
-	if (!window.confirm("Are you sure you want to reset your team to the last saved version? All unsaved changes will be lost.")) {
-		return; // user cancelled
-	}
-	
-	const lastSaved = savedPlayers[stageId] || [];
-	setSelectedPlayers((prev) => ({ ...prev, [stageId]: lastSaved }));
-	setSubsUsedLive((prev) => ({ ...prev, [stageId]: 0 }));
-
+	  recalcBudget(stageId, stageData);
+  
+      alert(`Changes discarded. Restored your last saved team with ${subsSaved} substitutions used.`);
+    } catch (err) {
+      console.error("Error discarding changes:", err);
+      alert("Failed to restore saved team. Please try again.");
+    }
   };
+
+
+  const handleRevertTeam = async (stageId) => {
+    if (!user) return;
+    if (!window.confirm("Revert to the last locked team? This will overwrite your current team.")) return;
+  
+    const now = new Date();
+    const matchesSnap = await getDocs(
+      query(collection(db, "tournaments", id, "stages", stageId, "matches"), orderBy("order", "asc"))
+    );
+  
+    // find last locked match (cutoffDate < now)
+    const lockedMatches = matchesSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(m => {
+        const cut = m.cutoffDate?.toDate ? m.cutoffDate.toDate() : m.cutoffDate;
+        return cut && new Date(cut) < now;
+      });
+  
+	if (lockedMatches.length === 0) {
+	  const lastSaved = savedPlayers[stageId] || [];
+	  setSelectedPlayers(prev => ({ ...prev, [stageId]: lastSaved }));
+	  setSubsUsedLive(prev => ({ ...prev, [stageId]: 0 }));
+	  // Keep committed subs count from DB (since no matches are locked yet)
+	  return;
+	}
+	  
+    // get latest locked match (highest order)
+    const lastLocked = lockedMatches[lockedMatches.length - 1];
+  
+    // read its XI doc
+    const xiRef = doc(db, "tournaments", id, "stages", stageId, "matches", lastLocked.id, "11s", user.uid);
+    const xiSnap = await getDoc(xiRef);
+	
+	
+  
+    if (!xiSnap.exists()) {
+      alert("No saved XI found for your team in the last locked match.");
+      return;
+    }
+  
+    const xiData = xiSnap.data();
+    const team = xiData.team || [];
+    const subsUsedAtThatTime = xiData.subsUsed ?? 0;
+  
+    // rebuild selectedPlayers array from IDs
+    const restoredSelections = team.map(pid => ({ playerId: pid }));
+  
+    setSelectedPlayers(prev => ({ ...prev, [stageId]: restoredSelections }));
+    //setSavedPlayers(prev => ({ ...prev, [stageId]: restoredSelections }));
+    setSubsUsedFromDB(prev => ({ ...prev, [stageId]: subsUsedAtThatTime }));
+    setSubsUsedLive(prev => ({ ...prev, [stageId]: 0 }));
+	
+	// 🔹 Persist reverted subsUsed to Firestore so future saves start from this point
+	const userRef = doc(db, "user_teams", user.uid);
+	
+	recalcBudget(stageId, restoredSelections);
+  
+    alert(`Team reverted to last locked match (${lastLocked.order}). Substitutions used: ${subsUsedAtThatTime}`);
+  };
+
   
   const handleGenerateRandomTeam = async (stageId) => {
   const stage = stages.find((s) => s.id === stageId);
@@ -419,25 +506,21 @@ const JoinTournament = () => {
     if (maxFromSameTeam > (roleComp.sameTeamMax || 11)) violations.push("Too many from one team");
     if (remaining < 0) violations.push("Over budget");
 	
-	 // 🔹 Substitution validation (only if both squads are full)
-	 const userRef = doc(db, "user_teams", user.uid);
-	 const userSnap = await getDoc(userRef);
-	 const prevData = userSnap.exists() ? userSnap.data() : {};
-	 const prevSquad = prevData[id]?.stages?.[stageId] || [];
-	 let subsUsed = 0;
-	 
-	 if (prevSquad.length === 11 && stageSelections.length === 11) {
-	   const oldIds = prevSquad.map((p) => p.playerId);
-	   const newIds = stageSelections.map((p) => p.playerId);
-	   const removed = oldIds.filter((p) => !newIds.includes(p));
-	   const added = newIds.filter((p) => !oldIds.includes(p));
-	   const changes = Math.max(removed.length, added.length);
-	   subsUsed = (prevData[id]?.subsUsed?.[stageId] ?? 0) + changes;
-	 
-	   if (subsUsed > stage.subsAllowed) {
-		 violations.push(`Too many subs: (${subsUsed}/${stage.subsAllowed})`);
-	   }
-	 }
+	// --- Substitution validation (UI-driven, no diff logic) ---
+	const userRef = doc(db, "user_teams", user.uid);
+	const userSnap = await getDoc(userRef);
+	const prevData = userSnap.exists() ? userSnap.data() : {};
+
+	// ✅ use exactly what UI shows
+	const uiSubs =
+	  (subsUsedFromDB[stageId] ?? 0) + (subsUsedLive[stageId] ?? 0);
+	const subsUsed = uiSubs;
+
+	// validate against stage cap
+	if (subsUsed > stage.subsAllowed) {
+	  violations.push(`Too many subs: (${subsUsed}/${stage.subsAllowed})`);
+	}
+
 	
   
     if (violations.length > 0) {
@@ -496,7 +579,12 @@ const JoinTournament = () => {
 	  // Only update team + timestamp; preserve totalPoints if present
 	  await setDoc(
 		xiRef,
-		{ uid: user.uid, team: teamIds, updatedAt: serverTimestamp() },
+		{ 
+		  uid: user.uid, 
+		  team: teamIds, 
+		  updatedAt: serverTimestamp(),
+		  subsUsed: subsUsed,
+		},
 		{ merge: true }
 	  );
 	  xiWritten++;
@@ -1119,30 +1207,62 @@ const JoinTournament = () => {
 					{" "} | Budget: {total - remaining}/{total} ({remaining} left)</b>
 				</p>
 				
-				{joined && (
-				  <div className="flex gap-2 mb-4">
-				  <button
-				    onClick={() => handleGenerateRandomTeam(stage.id)}
-				    className="bg-green-400 text-black px-4 py-2 rounded"
-				  >
-				    Random XI
-				  </button>
-				  
-					<button
-					  onClick={() => handleSaveTeam(stage.id)}
-					  className="bg-blue-500 text-white px-4 py-2 rounded"
-					>
-					  Save Team
-					</button>
+				{joined && (() => {
+				  // --- Compare selected vs saved XI for this stage ---
+				  const currentTeam = selectedPlayers[stage.id] || [];
+				  const savedTeam = savedPlayers[stage.id] || [];
 
-					<button
-					  onClick={() => handleResetTeam(stage.id)}
-					  className="bg-gray-500 text-white px-4 py-2 rounded"
-					>
-					  Reset Team
-					</button>
-				  </div>
-				)}
+				  const isSameXI = (a, b) => {
+					if (a.length !== b.length) return false;
+					const aIds = a.map(p => p.playerId).sort();
+					const bIds = b.map(p => p.playerId).sort();
+					return JSON.stringify(aIds) === JSON.stringify(bIds);
+				  };
+
+				  const hasChanges = !isSameXI(currentTeam, savedTeam);
+
+				  return (
+					<div className="flex gap-2 mb-4">
+					  <button
+						onClick={() => handleGenerateRandomTeam(stage.id)}
+						className="bg-green-400 text-black px-4 py-2 rounded"
+					  >
+						Random XI
+					  </button>
+
+					  <button
+						onClick={() => handleSaveTeam(stage.id)}
+						disabled={!hasChanges}
+						className={`px-4 py-2 rounded ${
+						  hasChanges
+							? "bg-blue-500 text-white cursor-pointer"
+							: "bg-blue-300 text-gray-200 cursor-not-allowed"
+						}`}
+					  >
+						{hasChanges ? "Save Team" : "No Changes to Save"}
+					  </button>
+
+					  <button
+						onClick={() => handleResetTeam(stage.id)}
+						disabled={!hasChanges}
+						className={`px-4 py-2 rounded ${
+						  hasChanges
+							? "bg-gray-500 text-white cursor-pointer"
+							: "bg-gray-400 text-gray-200 cursor-not-allowed"
+						}`}
+					  >
+						Discard Changes
+					  </button>
+
+					  <button
+						onClick={() => handleRevertTeam(stage.id)}
+						className="btn-danger"
+					  >
+						Revert to Last XI
+					  </button>
+					</div>
+				  );
+				})()}
 
 
                 {stageSelections.length === 0 ? (
