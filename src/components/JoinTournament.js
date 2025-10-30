@@ -15,6 +15,7 @@ import {
   serverTimestamp
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
+import {sortByRole } from "../lib/sortByRole";
 
 const JoinTournament = () => {
   const { id } = useParams();
@@ -162,13 +163,19 @@ const JoinTournament = () => {
         const rec = data[id] || {};
   
         if (rec.joined) setJoined(true);
-        if (rec.stages) {
-          setSelectedPlayers(rec.stages);
-          setSavedPlayers(rec.stages);             // 🔹 keep a baseline to compare against
-        } else {
-          setSelectedPlayers({});
-          setSavedPlayers({});
-        }
+		if (rec.stages) {
+		  const sortedStages = {};
+		  Object.keys(rec.stages).forEach(stageId => {
+			const team = rec.stages[stageId] || [];
+			sortedStages[stageId] = sortByRole(team, resolvePlayer);
+		  });
+
+		  setSelectedPlayers(sortedStages);
+		  setSavedPlayers(sortedStages); // 🔹 baseline for comparisons
+		} else {
+		  setSelectedPlayers({});
+		  setSavedPlayers({});
+		}
   
         if (rec.budgets) setBudgetLeftByStage(rec.budgets);
         setSubsUsedFromDB(rec.subsUsed || {});     // 🔹 committed subs from DB (per stage)
@@ -241,8 +248,11 @@ const JoinTournament = () => {
       : [...stagePlayers, { playerId: player.id, teamId: player.team }];
   
     // update selection state
-    const updated = { ...selectedPlayers, [stageId]: newSelection };
-    setSelectedPlayers(updated);
+	// update selection state (always sorted)
+	const sortedSelection = sortByRole(newSelection, resolvePlayer);
+	const updated = { ...selectedPlayers, [stageId]: sortedSelection };
+	setSelectedPlayers(updated);
+
   
     // --- 🔹 Live sub logic ---
     const oldSquad = savedPlayers[stageId] || [];
@@ -1028,11 +1038,11 @@ const JoinTournament = () => {
 									</tr>
 								  </thead>
 								  <tbody>
-									{(match.userXI || []).map(pid => {
-									  const p = resolvePlayer(pid);
+									{sortByRole((match.userXI || []).map(pid => ({ playerId: pid })), resolvePlayer).map(sel => {
+									  const p = resolvePlayer(sel.playerId);
 									  return (
-										<tr key={pid}>
-										  <td className="border px-2 py-1">{p?.playerName || pid}</td>
+										<tr key={sel.playerId}>
+										  <td className="border px-2 py-1">{p?.playerName || sel.playerId}</td>
 										  <td className="border px-2 py-1 text-right">{p?.role || ""}</td>
 										  <td className="border px-2 py-1 text-right">{p?.team || ""}</td>
 										</tr>
@@ -1279,32 +1289,32 @@ const JoinTournament = () => {
                         <th className="border px-2 py-1">Action</th>
                       </tr>
                     </thead>
-                    <tbody>
-                      {stageSelections.map((sel, i) => {
-                        const player = resolvePlayer(sel.playerId);
-                        if (!player) return null;
-                        return (
-                          <tr key={i}>
-                            <td className="border px-2 py-1">{player.playerName}</td>
-                            <td className="border px-2 py-1">{player.role}</td>
-                            <td className="border px-2 py-1">{player.team}</td>
-                            <td className="border px-2 py-1">{player.value}</td>
+					<tbody>
+					  {sortByRole(stageSelections, resolvePlayer).map((sel, i) => {
+						const player = resolvePlayer(sel.playerId);
+						if (!player) return null;
+						return (
+						  <tr key={i}>
+							<td className="border px-2 py-1">{player.playerName}</td>
+							<td className="border px-2 py-1">{player.role}</td>
+							<td className="border px-2 py-1">{player.team}</td>
+							<td className="border px-2 py-1">{player.value}</td>
 							<td className="border px-2 py-1 text-right">
 							  {getPlayerTotalPoints(stage.id, player.id)}
 							</td>
-                            <td className="border px-2 py-1">
-                              <button
-                                onClick={() => togglePlayer(stage.id, player)}
-                                className="btn-danger"
-                              >
-                                Drop
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+							<td className="border px-2 py-1">
+							  <button
+								onClick={() => togglePlayer(stage.id, player)}
+								className="btn-danger"
+							  >
+								Drop
+							  </button>
+							</td>
+						  </tr>
+						);
+					  })}
+					</tbody>
+									  </table>
                 )}
                 {/* Available Players */}
                 <h3 className="font-semibold mb-2">Available Players</h3>

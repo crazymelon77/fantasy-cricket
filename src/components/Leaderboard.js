@@ -415,19 +415,24 @@ const Leaderboard = () => {
                                             </tr>
                                           </thead>
                                           <tbody>
-                                            {(managerMatchSquads[s.id][m.id][r.uid] || []).map(pid => {
-                                              const info = playerInfoByStage[s.id]?.[pid] || {};
-                                              const pts = playerMatchTotals[s.id]?.[pid]?.[m.id] || 0;
-                                              return (
-                                                <tr key={pid}>
-                                                  <td>{info.name || pid}</td>
-                                                  <td>{info.role || ""}</td>
-                                                  <td>{info.team || ""}</td>
-                                                  <td style={{textAlign:"right"}}>{pts}</td>
-                                                </tr>
-                                              );
-                                            })}
-                                          </tbody>
+										  {(managerMatchSquads[s.id][m.id][r.uid] || [])
+											.map(pid => {
+											  const info = playerInfoByStage[s.id]?.[pid] || {};
+											  const pts = playerMatchTotals[s.id]?.[pid]?.[m.id] || 0;
+											  return { pid, info, pts };
+											})
+											.sort((a, b) => b.pts - a.pts) // 🔹 sort descending by points
+											.map(({ pid, info, pts }) => (
+											  <tr key={pid}>
+												<td>{info.name || pid}</td>
+												<td>{info.role || ""}</td>
+												<td>{info.team || ""}</td>
+												<td style={{ textAlign: "right" }}>{pts}</td>
+											  </tr>
+											))}
+										</tbody>
+
+
                                           <tfoot>
                                             <tr>
                                               <td colSpan={3} style={{textAlign:"right", fontWeight:600}}>Match Total</td>
