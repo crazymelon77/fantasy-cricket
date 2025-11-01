@@ -4,6 +4,8 @@ import { auth, db } from "../firebase";
 import {
   collection, getDocs, doc, getDoc, query, orderBy
 } from "firebase/firestore";
+import PlayerBreakdown from "./PlayerBreakdown";
+
 
 async function loadMatchStats(tId, sId, mId) {
   const statsSnap = await getDocs(
@@ -29,6 +31,9 @@ const Leaderboard = () => {
 
   // Points per player per match: { [stageId]: { [playerId]: { [matchId]: number } } }
   const [playerMatchTotals, setPlayerMatchTotals] = useState({});
+  const [playerMatchStatlines, setPlayerMatchStatlines] = useState({});
+// structure: { [stageId]: { [matchId]: { [playerId]: full stats doc } } }
+
 
   // Participants from user_teams: [{ uid, displayName?, email?, stagesSelections }]
   const [participants, setParticipants] = useState([]);
@@ -42,6 +47,21 @@ const Leaderboard = () => {
   const [expandedStages, setExpandedStages] = useState({});   // { uid: { stageId: true } }
   const [expandedMatches, setExpandedMatches] = useState({}); // { uid: { stageId: { matchId: true } } }
   const [sort, setSort] = useState({ key: "total", dir: "desc" });
+  
+  const [expandedPlayers, setExpandedPlayers] = useState({}); // { [stageId]: { [matchId]: { [playerId]: true } } }
+  
+    
+  const togglePlayerDetails = (stageId, matchId, playerId) => {
+    setExpandedPlayers(prev => {
+      const next = structuredClone(prev); // deep clone to avoid state overwrite
+      if (!next[stageId]) next[stageId] = {};
+      if (!next[stageId][matchId]) next[stageId][matchId] = {};
+      next[stageId][matchId][playerId] = !next[stageId][matchId][playerId];
+      return next;
+    });
+  };
+  
+
 
   // ---- toggles ----
   const toggleStageExpand = (uid, stageId) => {
@@ -51,55 +71,72 @@ const Leaderboard = () => {
     }));
   };
 
-  const toggleMatchExpand = async (uid, stageId, matchId) => {
-    const isOpen = expandedMatches[uid]?.[stageId]?.[matchId];
-  
-    if (!isOpen) {
-      // ✅ Load match squad only when expanding
-      const tourRef = doc(db, "tournaments", tournamentId);
-      const squadsSnap = await getDocs(
-        collection(tourRef, "stages", stageId, "matches", matchId, "11s")
-      );
-      
-      setManagerMatchSquads(prev => {
-        const next = { ...prev };
-        if (!next[stageId]) next[stageId] = {};
-        if (!next[stageId][matchId]) next[stageId][matchId] = {};
-        
-        squadsSnap.forEach(sqDoc => {
-          const d = sqDoc.data() || {};
-          const players = Array.isArray(d.team) ? d.team : [];
-          next[stageId][matchId][sqDoc.id] = players;
-        });
-        
-        return next;
+const toggleMatchExpand = async (uid, stageId, matchId) => {
+  const isOpen = expandedMatches[uid]?.[stageId]?.[matchId];
+
+  if (!isOpen) {
+    // ✅ Load match squad only when expanding
+    const tourRef = doc(db, "tournaments", tournamentId);
+    const squadsSnap = await getDocs(
+      collection(tourRef, "stages", stageId, "matches", matchId, "11s")
+    );
+
+    setManagerMatchSquads(prev => {
+      const next = { ...prev };
+      if (!next[stageId]) next[stageId] = {};
+      if (!next[stageId][matchId]) next[stageId][matchId] = {};
+
+      squadsSnap.forEach(sqDoc => {
+        const d = sqDoc.data() || {};
+        const players = Array.isArray(d.team) ? d.team : [];
+        next[stageId][matchId][sqDoc.id] = players;
       });
-  
-      // ✅ Load individual player stats only when expanding
-      const stats = await loadMatchStats(tournamentId, stageId, matchId);
-      setPlayerMatchTotals((prev) => {
-        const next = { ...prev };
-        if (!next[stageId]) next[stageId] = {};
-        Object.entries(stats).forEach(([pid, pts]) => {
-          if (!next[stageId][pid]) next[stageId][pid] = {};
-          next[stageId][pid][matchId] = pts.total ?? 0;
-        });
-        return next;
+
+      return next;
+    });
+
+    // ✅ Load individual player stats (for totals)
+    const stats = await loadMatchStats(tournamentId, stageId, matchId);
+    setPlayerMatchTotals(prev => {
+      const next = { ...prev };
+      if (!next[stageId]) next[stageId] = {};
+      Object.entries(stats).forEach(([pid, pts]) => {
+        if (!next[stageId][pid]) next[stageId][pid] = {};
+        next[stageId][pid][matchId] = pts.total ?? 0;
       });
-    }
-  
-    // toggle expansion state
-    setExpandedMatches((prev) => ({
-      ...prev,
-      [uid]: {
-        ...(prev[uid] || {}),
-        [stageId]: {
-          ...(prev[uid]?.[stageId] || {}),
-          [matchId]: !isOpen,
-        },
+      return next;
+    });
+
+    // ✅ NEW: Load full statline documents (for PlayerBreakdown)
+    const statsSnapFull = await getDocs(
+      collection(tourRef, "stages", stageId, "matches", matchId, "stats")
+    );
+    const statlines = {};
+    statsSnapFull.forEach(d => {
+      statlines[d.id] = d.data() || {};
+    });
+
+    setPlayerMatchStatlines(prev => {
+      const next = { ...prev };
+      if (!next[stageId]) next[stageId] = {};
+      next[stageId][matchId] = statlines;
+      return next;
+    });
+  }
+
+  // toggle expansion state
+  setExpandedMatches(prev => ({
+    ...prev,
+    [uid]: {
+      ...(prev[uid] || {}),
+      [stageId]: {
+        ...(prev[uid]?.[stageId] || {}),
+        [matchId]: !isOpen,
       },
-    }));
-  };
+    },
+  }));
+};
+
 
   const colCount = 2 + stages.length; // Manager + per-stage + Total
 
@@ -338,13 +375,21 @@ const Leaderboard = () => {
                 });
 				// ✅ Get match IDs from this user's match totals
 				const userMatchTotals = playerMatchTotals[s.id]?.[r.uid] || {};
+
+				// 🔹 Sort by match.order field stored in Firestore
+				const orderedMatches = stages
+				  .find(stage => stage.id === s.id)
+				  ?.matches || [];
+
 				const matchRows = Object.keys(userMatchTotals)
 				  .filter(mId => matchMeta[s.id]?.[mId]?.scored)
 				  .map(mId => {
 					const matchTotal = userMatchTotals[mId] ?? 0;
-					return { id: mId, total: matchTotal };
+					const order = orderedMatches.find(m => m.id === mId)?.order ?? 9999;
+					return { id: mId, total: matchTotal, order };
 				  })
-				  .sort((a, b) => a.id.localeCompare(b.id));
+				  .sort((a, b) => a.order - b.order);
+
 
                 return (
                   <tr key={`${r.uid}-${s.id}-stage`}>
@@ -393,7 +438,7 @@ const Leaderboard = () => {
                                           className="btn-secondary"
                                           onClick={() => toggleMatchExpand(r.uid, s.id, m.id)}
                                         >
-                                          {expandedMatches[r.uid]?.[s.id]?.[m.id] ? "Hide" : "Match XI"}
+                                          {expandedMatches[r.uid]?.[s.id]?.[m.id] ? "Hide XI" : "Match XI"}
                                         </button>
                                       ) : (
                                         <span className="text-gray-500">No squad recorded</span>
@@ -412,25 +457,57 @@ const Leaderboard = () => {
                                               <th>Role</th>
                                               <th>Team</th>
                                               <th style={{textAlign:"right"}}>Match Points</th>
+											  <th style={{ textAlign: "center" }}>Details</th>
                                             </tr>
                                           </thead>
-                                          <tbody>
-										  {(managerMatchSquads[s.id][m.id][r.uid] || [])
-											.map(pid => {
-											  const info = playerInfoByStage[s.id]?.[pid] || {};
-											  const pts = playerMatchTotals[s.id]?.[pid]?.[m.id] || 0;
-											  return { pid, info, pts };
-											})
-											.sort((a, b) => b.pts - a.pts) // 🔹 sort descending by points
-											.map(({ pid, info, pts }) => (
-											  <tr key={pid}>
-												<td>{info.name || pid}</td>
-												<td>{info.role || ""}</td>
-												<td>{info.team || ""}</td>
-												<td style={{ textAlign: "right" }}>{pts}</td>
-											  </tr>
-											))}
-										</tbody>
+											<tbody>
+											  {(managerMatchSquads[s.id][m.id][r.uid] || [])
+												// build array of objects with points
+												.map(pid => {
+												  const info = playerInfoByStage[s.id]?.[pid] || {};
+												  const pts = playerMatchTotals[s.id]?.[pid]?.[m.id] || 0;
+												  const statline = playerMatchStatlines[s.id]?.[m.id]?.[pid] || {};
+												  return { pid, info, pts, statline };
+												})
+												// 🔹 sort by match points (highest first)
+												.sort((a, b) => b.pts - a.pts)
+												// render
+												.map(({ pid, info, pts, statline }) => {
+												  const stageScoring = stages.find(x => x.id === s.id)?.scoring || {};
+												  const isOpen = !!(expandedPlayers[s.id]?.[m.id]?.[pid]);
+
+												  return (
+													<React.Fragment key={pid}>
+													  <tr>
+														<td>{info.name || pid}</td>
+														<td>{info.role || ""}</td>
+														<td>{info.team || ""}</td>
+														<td style={{ textAlign: "right" }}>{pts}</td>
+														<td style={{ textAlign: "center" }}>
+														  <button
+															className="btn-secondary"
+															onClick={() => togglePlayerDetails(s.id, m.id, pid)}
+														  >
+															{isOpen ? "Hide" : "Details"}
+														  </button>
+														</td>
+													  </tr>
+
+													  {isOpen && (
+														<tr>
+														  <td colSpan={5} style={{ background: "#f9fafb" }}>
+															<PlayerBreakdown
+															  p={{ id: pid, ...statline, points: statline.points || {} }}
+															  scoring={stageScoring}
+															/>
+														  </td>
+														</tr>
+													  )}
+													</React.Fragment>
+												  );
+												})}
+											</tbody>
+
 
 
                                           <tfoot>
