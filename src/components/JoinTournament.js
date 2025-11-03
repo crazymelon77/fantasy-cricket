@@ -236,7 +236,7 @@ const JoinTournament = () => {
   };
 
   // toggle player
-  const togglePlayer = (stageId, player) => {
+  const togglePlayer = async (stageId, player) => {
     if (!joined) return;
   
     const stagePlayers = selectedPlayers[stageId] || [];
@@ -252,6 +252,20 @@ const JoinTournament = () => {
 	const sortedSelection = sortByRole(newSelection, resolvePlayer);
 	const updated = { ...selectedPlayers, [stageId]: sortedSelection };
 	setSelectedPlayers(updated);
+	
+	// --- 🔹 Sub counting only if stage has locked matches ---
+	const matchesSnap = await getDocs(
+		query(
+		collection(db, "tournaments", id, "stages", stageId, "matches"),
+		orderBy("order", "asc")
+		)
+	);
+	const anyLocked = matchesSnap.docs.some((d) => {
+		const m = d.data() || {};
+		const cut = m.cutoffDate?.toDate ? m.cutoffDate.toDate() : m.cutoffDate;
+		return cut && new Date(cut) < new Date();
+	});
+	if (!anyLocked) return; // 🚫 skip sub count updates
 
   
     // --- 🔹 Live sub logic ---
@@ -294,6 +308,18 @@ const JoinTournament = () => {
       return next;
     });
   }, [stages, selectedPlayers, playersByTeam]);
+  
+  const hasLockedMatches = async (stageId) => {
+    const matchesSnap = await getDocs(
+      query(collection(db, "tournaments", id, "stages", stageId, "matches"), orderBy("order", "asc"))
+    );
+    return matchesSnap.docs.some(d => {
+      const m = d.data() || {};
+      const cut = m.cutoffDate?.toDate ? m.cutoffDate.toDate() : m.cutoffDate;
+      return cut && new Date(cut) < new Date(); // locked
+    });
+  };
+
   
   const handleResetTeam = async (stageId) => {
     if (!window.confirm("Discard all unsaved changes and revert to your last saved team?")) return;
@@ -347,8 +373,7 @@ const JoinTournament = () => {
 	if (lockedMatches.length === 0) {
 	  const lastSaved = savedPlayers[stageId] || [];
 	  setSelectedPlayers(prev => ({ ...prev, [stageId]: lastSaved }));
-	  setSubsUsedLive(prev => ({ ...prev, [stageId]: 0 }));
-	  // Keep committed subs count from DB (since no matches are locked yet)
+	  recalcBudget(stageId, lastSaved);
 	  return;
 	}
 	  
@@ -835,10 +860,36 @@ const JoinTournament = () => {
 
         return (
           <div key={stage.id} className="mb-4 border rounded">
-            <div className="p-3 bg-gray-100">
-              <h2 className="text-xl font-bold">{stage.name}</h2>
-		  
-              <div className="mt-1 text-sm">
+			<div className="p-3 bg-gray-100 flex items-center justify-between gap-3">
+			  <span className="font-bold text-base md:text-lg"><b>{stage.name}</b></span>
+
+			  <div className="flex items-center gap-3 text-sm text-gray-700">
+				<span>
+				  {stageSelections.length} picked | Budget left: {remaining}
+				</span>
+				<button
+				  onClick={async () => {
+					if (isExpanded) {
+					  setExpandedStage(null);
+					} else {
+					  const matches = await fetchMatchResults(stage.id);
+					  setStageResults(prev => ({ ...prev, [stage.id]: matches }));
+					  setExpandedStage(stage.id);
+					  await fetchMyXIForStage(stage.id, matches);
+					}
+				  }}
+				  className="btn-secondary"
+				>
+				  {isExpanded ? "Collapse" : "Expand"}
+				</button>
+			  </div>
+			</div>
+
+
+
+            {isExpanded && (
+              <div className="p-3">
+			    <div className="mt-1 text-sm">
 
 				{/* Scoring summary */}
 				<b>Scoring Rules:</b> <br />
@@ -856,34 +907,7 @@ const JoinTournament = () => {
 				  11 Total Players
 				</p> 
 				
-              </div>
-              <div className="flex justify-between items-center mt-2">
-                <span className="text-sm text-gray-600">
-                  {stageSelections.length} picked | Budget left: {remaining}
-                </span>
-                <button
-                   onClick={async () => {
-					if (isExpanded) {
-						setExpandedStage(null);
-					} else {
-						const matches = await fetchMatchResults(stage.id);
-						
-						console.log(`[STATE SET] Stage ${stage.id} ready for state update. Matches:`, matches);
-						
-						setStageResults((prev) => ({ ...prev, [stage.id]: matches }));
-						setExpandedStage(stage.id);
-						await fetchMyXIForStage(stage.id, matches);
-					  }
-				   }}
-                  className="btn-secondary"
-                >
-                  {isExpanded ? "Collapse" : "Expand"}
-                </button>
-              </div>
-            </div>
-
-            {isExpanded && (
-              <div className="p-3">
+                </div>
 			  {/* Match Results */}
 				{(stageResults[stage.id] || []).length > 0 && (
 				  <div className="mb-4">
