@@ -306,12 +306,12 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
             <h1 className="text-lg sm:text-xl md:text-2xl font-bold break-words">
               {tournament.name} — Leaderboard
             </h1>
-            <button 
-              className="bg-gray-500 text-white px-3 py-1 rounded whitespace-nowrap flex-shrink-0" 
-              onClick={() => navigate(-1)}
-            >
-              Back
-            </button>
+			<button 
+			  className="bg-gray-500 text-white px-3 py-1 rounded whitespace-nowrap flex-shrink-0" 
+			  onClick={() => navigate("/")}
+			>
+			  Back to Home
+			</button>
           </div>
   
           <div className="main-leaderboard-container w-full overflow-x-auto">
