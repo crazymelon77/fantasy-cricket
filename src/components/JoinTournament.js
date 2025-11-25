@@ -436,9 +436,11 @@ const JoinTournament = () => {
   const bowlers = allPlayers.filter(p => p.role === "Bowler");
   const allRounders = allPlayers.filter(p => p.role === "All Rounder");
 
-  const requiredBats = roleComp.batsman ?? 0;
-  const requiredBowl = roleComp.bowler ?? 0;
-  const requiredAllr = roleComp.allRounder ?? 0;
+  //updating to cap in random team instead of exact count
+  const maxBats = roleComp.batsman ?? 0;
+  const maxBowl = roleComp.bowler ?? 0;
+  const maxAllr = roleComp.allRounder ?? 0;
+  
   const totalRequired = 11;
 
   // Helper to shuffle an array (Fisher–Yates)
@@ -461,12 +463,17 @@ const JoinTournament = () => {
     while (attempt < maxAttempts) {
       attempt++;
   
-      const chosen = [
-        ...pickRandom(batsmen, requiredBats),
-        ...pickRandom(bowlers, requiredBowl),
-        ...pickRandom(allRounders, requiredAllr),
-      ];
-  
+		// Pick a random number UP TO the max allowed in each category
+		const countBats = Math.floor(Math.random() * (maxBats + 1));
+		const countBowl = Math.floor(Math.random() * (maxBowl + 1));
+		const countAllr = Math.floor(Math.random() * (maxAllr + 1));
+		
+		const chosen = [
+		   ...pickRandom(batsmen, countBats),
+		   ...pickRandom(bowlers, countBowl),
+		   ...pickRandom(allRounders, countAllr),
+		];
+		  
       // Fill remaining slots randomly if < 11
       let remaining = totalRequired - chosen.length;
       if (remaining > 0) {
@@ -728,7 +735,17 @@ const JoinTournament = () => {
     // --- Batting ---
     const bat = scoring.batting || {};
     const batting = [];
-    if (bat.perRun != null) batting.push(`${bat.perRun}/run`);
+	
+	//Modify rules display if strike rate scaling is on
+	if (bat.perRun != null) {
+		if (bat.useStrikeRateWeighting) {
+		  batting.push(`${bat.perRun}/run x SR`);
+		} else {
+		  batting.push(`${bat.perRun}/run`);
+		}
+	}
+
+    //if (bat.perRun != null) batting.push(`${bat.perRun}/run`); not required after strike rate patch
     if (bat.perBallFaced != null) batting.push(`${bat.perBallFaced}/ball faced`);
 	if (bat.perDuck != null) batting.push(`${bat.perDuck}/duck`);
     if (bat.perFour != null) batting.push(`${bat.perFour}/four`);
@@ -1224,9 +1241,9 @@ const JoinTournament = () => {
 				
 				
 				<p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
-				  {batsmen}/{roleComp.batsman ?? 0} Batsmen,{" "}
-				  {bowlers}/{roleComp.bowler ?? 0} Bowlers,{" "}
-				  {allRounders}/{roleComp.allRounder ?? 0} All Rounders,{" "}
+				  {batsmen}{" "}Batsmen [Max: {roleComp.batsman ?? 0}],{" "}
+				  {bowlers}{" "}Bowlers [Max: {roleComp.bowler ?? 0}],{" "}
+				  {allRounders}{" "}All Rounders [Max: {roleComp.allRounder ?? 0}],{" "}
 				  {maxFromSameTeam}/{roleComp.sameTeamMax ?? 0} same team
 				  <br />
 				  {stageSelections.length}/11 Total Players

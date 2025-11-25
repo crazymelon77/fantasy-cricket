@@ -102,8 +102,20 @@ const PlayerBreakdown = ({ p, scoring }) => {
 				  // Batting
 				  if (category === "Batting") {
 					const bat = scoring.batting || {};
-					if (key === "runs") pointsEarned = val * (bat.perRun ?? 0);
+					if (key === "runs") {
+					  const perRun = bat.perRun ?? 0;
+					  const runs = Number(p.runs ?? 0);
+					  const balls = Number(p.ballsFaced ?? 0);
+
+					  if (bat.useStrikeRateWeighting && balls > 0) {
+						const srFactor = runs / balls;          // strike rate proportion
+						pointsEarned = Math.ceil(perRun * runs * srFactor);   // SR-scaled + rounded up
+					  } else {
+						pointsEarned = perRun * runs;
+					  }
+					}
 					else if (key === "ballsFaced") pointsEarned = val * (bat.perBallFaced ?? 0);
+					else if (key === "zeros") pointsEarned = val * (bat.perDuck ?? 0);
 					else if (key === "fours") pointsEarned = val * (bat.perFour ?? 0);
 					else if (key === "sixes") pointsEarned = val * (bat.perSix ?? 0);
 					else if (key === "milestones") pointsEarned = val * (bat.bonusEveryXRuns?.points ?? 0);

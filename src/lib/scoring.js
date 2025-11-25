@@ -3,7 +3,25 @@
 export function scoreBatting(bat, s) {
   if (!bat) return 0;
   let pts = 0;
-  pts += (bat.perRun ?? 0) * (s.runs ?? 0);
+  
+  //logic for strike rate weighting
+  //if stike rate flag is enabled, multiply runs by strike rate.
+  //if flag is off, runs get multiplied by points with no influence from strike rate
+  //in both cases ball faced is independent metric and continues to follow its own rules
+  const runs = s.runs ?? 0;
+  const balls = s.ballsFaced ?? 0;
+  const perRun = bat.perRun ?? 0;
+  
+  if (bat.useStrikeRateWeighting && balls > 0) {
+	  const strikeRate = runs/balls;
+	  const weighted = perRun * runs * strikeRate;
+	  pts += Math.ceil(weighted);
+  } else {
+	  pts += perRun * runs;
+  }
+  
+  //  pts += (bat.perRun ?? 0) * (s.runs ?? 0); not required any more after strike rate changes
+  
   pts += (bat.perBallFaced ?? 0) * (s.ballsFaced ?? 0);
   pts += (bat.perDuck ?? 0) * (s.zeros ?? 0);
   pts += (bat.perFour ?? 0) * (s.fours ?? 0);

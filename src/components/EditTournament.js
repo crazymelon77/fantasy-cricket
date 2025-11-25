@@ -456,6 +456,71 @@ const snapshotMatchXIs = async (tid, sid, mid) => {
       ),
     });
   };
+  
+  // 🔄 Sync match stats with the current official team roster
+  const syncMatchStatsForTeam = async (stageId, teamId, players) => {
+    const matchesSnap = await getDocs(
+      collection(db, "tournaments", tournamentId, "stages", stageId, "matches")
+    );
+  
+    const playerIds = new Set((players || []).map((p) => p.id));
+  
+    for (const matchDoc of matchesSnap.docs) {
+      const statsRef = collection(
+        db,
+        "tournaments",
+        tournamentId,
+        "stages",
+        stageId,
+        "matches",
+        matchDoc.id,
+        "stats"
+      );
+  
+      const statsSnap = await getDocs(statsRef);
+	  
+	  // ❗️ SKIP if stats collection does NOT exist yet
+      if (statsSnap.empty) {
+        continue;
+      }
+	
+      const existingIds = new Set(statsSnap.docs.map((d) => d.id));
+  
+      // --- Add missing players ---
+      for (const pid of playerIds) {
+        if (!existingIds.has(pid)) {
+          await setDoc(
+            doc(statsRef, pid),
+            {
+              runs: 0,
+              ballsFaced: 0,
+              fours: 0,
+              sixes: 0,
+              zeros: 0,
+              notOuts: 0,
+              milestones: 0,
+              ballsBowled: 0,
+              runsGiven: 0,
+              dotBalls: 0,
+              maidenOvers: 0,
+              wides: 0,
+              noBalls: 0,
+              wickets: 0,
+              hauls: 0,
+              catches: 0,
+              runouts: 0,
+              played: false,
+              won: false,
+              mom: false,
+              awayTeam: false,
+            },
+            { merge: true }
+          );
+        }
+      }
+    }
+  };
+  
 
   const saveTeam = async (stageId, team) => {
     const teamRef = doc(
@@ -468,6 +533,7 @@ const snapshotMatchXIs = async (tid, sid, mid) => {
       team.id
     );
     await updateDoc(teamRef, { name: team.name });
+	await syncMatchStatsForTeam(stageId, team.id, playersByTeam[team.id]);
     alert("Team saved");
   };
 
@@ -744,6 +810,17 @@ const snapshotMatchXIs = async (tid, sid, mid) => {
                 value={stage.scoring?.batting?.perRun ?? 0}
                 onChange={(e) => handleScoringChange(sIdx, ["batting", "perRun"], e.target.value)}
               />
+			  {/* Strike-rate weighting toggle */}
+				<label className="flex items-center space-x-2 mt-2">
+				  <input
+					type="checkbox"
+					checked={stage.scoring.batting?.useStrikeRateWeighting || false}
+					onChange={(e) =>
+					  handleScoringChange(sIdx, ["batting", "useStrikeRateWeighting"], e.target.checked)
+					}
+				  />
+				  <span>Scale By SR</span>
+				</label>
             </div>
             <div>
               <label>Points per Ball Faced:</label>
