@@ -9,6 +9,7 @@ import Leaderboard from "./components/Leaderboard";
 import "./styles.css";
 import EnterMatchResults from "./components/EnterMatchResults";
 import MatchDetails from "./components/MatchDetails";
+import ViewSquads from "./components/ViewSquads";
 
 
 
@@ -25,11 +26,7 @@ function App() {
 		  <Route path="/tournament/:tId/stage/:sId/match/:mId/results" element={<EnterMatchResults />} />
 		  <Route path="/tournament/:tId/stage/:sId/match/:mId/scorecard" element={<MatchDetails />} />
 		  <Route path="/tournament/:id/leaderboard" element={<Leaderboard />} />
-		  
-
-
-
-
+		  <Route path="/tournament/:id/squads" element={<ViewSquads />} />
         </Routes>
       </div>
     </Router>

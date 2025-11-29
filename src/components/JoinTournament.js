@@ -825,11 +825,17 @@ const JoinTournament = () => {
             <button onClick={handleJoin} className="btn-add">Join</button>
           )}
 		  <button
-      onClick={() => navigate(`/tournament/${id}/leaderboard`)}
-      className="bg-gray-700 text-white px-4 py-2 rounded"
-    >
-      Leaderboard
-    </button>
+			onClick={() => navigate(`/tournament/${id}/leaderboard`)}
+			className="bg-gray-700 text-white px-4 py-2 rounded"
+		  >
+			Leaderboard
+		  </button>
+		  <button
+		    onClick={() => navigate(`/tournament/${id}/squads`)}
+		    className="bg-gray-700 text-white px-4 py-2 rounded"
+		  >
+		    View Squads
+		  </button>
           <button onClick={() => navigate("/")} className="bg-gray-500 text-white px-4 py-2 rounded">Back to Home</button>
         </div>
       </div>
