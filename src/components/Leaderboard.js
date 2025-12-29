@@ -138,7 +138,7 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
 };
 
 
-  const colCount = 2 + stages.length; // Manager + per-stage + Total
+  const colCount = 3 + stages.length; // Manager + per-stage + Total + Lead
 
   const headerClick = (key) => {
     setSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" });
@@ -293,6 +293,15 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
     });
     return copy;
   }, [rows, sort]);
+  
+  const leaderTotal = useMemo(() => {
+    return sortedRows[0]?.total ?? 0;
+  }, [sortedRows]);
+
+  const formatLead = (diff) => {
+    if (!diff) return "0";
+    return diff > 0 ? `+${diff}` : `${diff}`;
+  };
 
   if (loading) return <div className="p-4">Loading leaderboard…</div>;
   if (!tournament) return null;
@@ -328,6 +337,7 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
             <th onClick={() => headerClick("total")} style={{cursor:"pointer", textAlign:"right"}}>
               Total {sort.key==="total" ? (sort.dir==="asc"?"▲":"▼"):""}
             </th>
+			<th style={{ textAlign: "right" }}>Lead</th>
           </tr>
         </thead>
 
@@ -357,6 +367,7 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
 				  );
 				})}
                 <td style={{textAlign:"right", fontWeight:"bold"}}>{r.total}</td>
+				<td style={{ textAlign: "right" }}>{formatLead((r.total ?? 0) - leaderTotal)}</td>
               </tr>
 
               {/* Expanded Stage → Matches */}
