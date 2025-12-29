@@ -138,7 +138,7 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
 };
 
 
-  const colCount = 3 + stages.length; // Manager + per-stage + Total + Lead
+  const colCount = 4 + stages.length; // Manager + per-stage + Total + Lead + Diff
 
   const headerClick = (key) => {
     setSort(prev => prev.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" });
@@ -302,6 +302,12 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
     if (!diff) return "0";
     return diff > 0 ? `+${diff}` : `${diff}`;
   };
+  
+
+  const formatDiff = (diff) => {
+    if (!diff) return "0";
+    return diff > 0 ? `+${diff}` : `${diff}`;
+  };
 
   if (loading) return <div className="p-4">Loading leaderboard…</div>;
   if (!tournament) return null;
@@ -338,11 +344,12 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
               Total {sort.key==="total" ? (sort.dir==="asc"?"▲":"▼"):""}
             </th>
 			<th style={{ textAlign: "right" }}>Lead</th>
+			<th style={{ textAlign: "right" }}>Diff</th>
           </tr>
         </thead>
 
         <tbody>
-          {sortedRows.map(r => (
+          {sortedRows.map((r, idx) => (
             <React.Fragment key={r.uid}>
               <tr>
                 <td>{r.label}</td>
@@ -368,6 +375,13 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
 				})}
                 <td style={{textAlign:"right", fontWeight:"bold"}}>{r.total}</td>
 				<td style={{ textAlign: "right" }}>{formatLead((r.total ?? 0) - leaderTotal)}</td>
+				<td style={{ textAlign: "right" }}>
+                  {formatDiff(
+                    idx === 0
+                      ? 0
+                      : (r.total ?? 0) - (sortedRows[idx - 1]?.total ?? 0)
+                  )}
+                </td>
               </tr>
 
               {/* Expanded Stage → Matches */}
