@@ -49,7 +49,7 @@ const JoinTournament = () => {
   
   const recalcBudget = (stageId, team) => {
     const totalSpent = team.reduce((sum, p) => sum + (p.cost || 0), 0);
-    const budgetLeft = (stages.find(s => s.id === stageId)?.maxBudget ?? 0) - totalSpent;
+    const budgetLeft = (stages.find(s => s.id === stageId)?.budget ?? 0) - totalSpent;
   
     setBudgetLeftByStage(prev => ({ ...prev, [stageId]: budgetLeft }));
   };

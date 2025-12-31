@@ -26,7 +26,7 @@ export function scoreBatting(bat, s) {
   pts += (bat.perDuck ?? 0) * (s.zeros ?? 0);
   pts += (bat.perFour ?? 0) * (s.fours ?? 0);
   pts += (bat.perSix ?? 0) * (s.sixes ?? 0);
-  if (s.notOut) pts += (bat.notOutBonus ?? 0);
+  pts += (bat.notOutBonus ?? 0) * (s.notOuts ?? 0);
   if (bat.bonusEveryXRuns?.x && bat.bonusEveryXRuns?.points) {
     const times = s.milestones ?? 0;
     pts += times * bat.bonusEveryXRuns.points;

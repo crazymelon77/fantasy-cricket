@@ -30,10 +30,6 @@ export async function computeStageScores(tId, sId, mId) {
       won: !!s.won,
     });
 
-    if (s.notOuts) {
-      points.batting += (scoring.batting?.notOutBonus || 0) * s.notOuts;
-      points.total += (scoring.batting?.notOutBonus || 0) * s.notOuts;
-    }
     if (s.mom) {
       points.general += scoring.general?.manOfTheMatch || 0;
       points.total += scoring.general?.manOfTheMatch || 0;

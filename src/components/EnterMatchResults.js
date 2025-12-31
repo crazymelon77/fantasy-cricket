@@ -529,7 +529,7 @@ const handleImportCSV = async (e) => {
 <div style={{ marginTop: "20px" }}>
   <button onClick={saveResults}>Save Results</button>
   <button onClick={runCompute}>Compute Points</button>
-  <button class="btn-danger" onClick={resetStats}>Reset Players</button>
+  <button className="btn-danger" onClick={resetStats}>Reset Players</button>
   <button onClick={exportCSV}>Export CSV</button>
 
   {/* CSV import */}
