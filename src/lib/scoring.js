@@ -39,7 +39,24 @@ export function scoreBowling(bowl, s) {
   let pts = 0;
   pts += (bowl.perBallBowled ?? 0) * (s.ballsBowled ?? 0);
   pts += (bowl.perDotBall ?? 0) * (s.dotBalls ?? 0);
-  pts += (bowl.perRunConceded ?? 0) * (s.runsConceded ?? 0);
+
+  // Runs conceded can optionally be scaled by a target economy rate
+  // Formula:
+  //   perRun * runsGiven * ((1 - targetEcon/6) + (runsGiven/ballsBowled))
+  // (targetEcon is in runs per over; runsGiven/ballsBowled is runs per ball)
+  const runsGiven = s.runsConceded ?? s.runsGiven ?? 0;
+  const ballsBowled = s.ballsBowled ?? 0;
+  const perRunConceded = bowl.perRunConceded ?? 0;
+  const targetEcon = bowl.targetEcon ?? 6;
+
+  if (bowl.useEconWeighting && ballsBowled > 0) {
+    const factor = (1 - targetEcon / 6) + (runsGiven / ballsBowled);
+    const weighted = perRunConceded * runsGiven * factor;
+    pts += Math.ceil(weighted);
+  } else {
+    pts += perRunConceded * runsGiven;
+  }
+  
   pts += (bowl.perWide ?? 0) * (s.wides ?? 0);
   pts += (bowl.perNoBall ?? 0) * (s.noBalls ?? 0);
   pts += (bowl.perWicket ?? 0) * (s.wickets ?? 0);

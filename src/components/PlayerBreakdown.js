@@ -121,6 +121,7 @@ const PlayerBreakdown = ({ p, scoring }) => {
 					else if (key === "milestones") pointsEarned = val * (bat.bonusEveryXRuns?.points ?? 0);
 					else if (key === "notOuts") pointsEarned = val * (bat.notOutBonus ?? 0);
 				  }
+				  
 				  // Bowling
 				  else if (category === "Bowling") {
 					const bowl = scoring.bowling || {};
@@ -129,7 +130,21 @@ const PlayerBreakdown = ({ p, scoring }) => {
 					else if (key === "maidenOvers") pointsEarned = val * (bowl.perMaidenOver ?? 0);
 					else if (key === "wickets") pointsEarned = val * (bowl.perWicket ?? 0);
 					else if (key === "hauls") pointsEarned = val * (bowl.bonusAfterMinWickets?.points ?? 0);
-					else if (key === "runsGiven") pointsEarned = val * (bowl.perRunConceded ?? 0);
+					
+					else if (key === "runsGiven") {
+					  const runsGiven = Number(p.runsGiven ?? 0);
+					  const ballsBowled = Number(p.ballsBowled ?? 0);
+					  const perRunConceded = bowl.perRunConceded ?? 0;
+					  const targetEcon = bowl.targetEcon ?? 6; //target econ from edit tournament
+
+					  if (bowl.useEconWeighting && ballsBowled > 0) {
+						const factor = (1 - targetEcon / 6) + (runsGiven / ballsBowled); //formula to determine final points
+						pointsEarned = Math.ceil(perRunConceded * runsGiven * factor); //econ-scaled + rounded up
+					  } else {
+						pointsEarned = runsGiven * perRunConceded;
+					  }
+					}
+					
 					else if (key === "wides") pointsEarned = val * (bowl.perWide ?? 0);
 					else if (key === "noBalls") pointsEarned = val * (bowl.perNoBall ?? 0);
 				  }

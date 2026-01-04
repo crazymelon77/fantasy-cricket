@@ -763,6 +763,17 @@ const JoinTournament = () => {
     // --- Bowling ---
     const bowl = scoring.bowling || {};
     const bowling = [];
+
+    // Runs conceded display (optionally scaled by target econ)
+    if (bowl.perRunConceded != null) {
+      if (bowl.useEconWeighting) {
+        const target = bowl.targetEcon ?? 6;
+        bowling.push(`${bowl.perRunConceded}/run given (adjusted for target econ of ${target})`);
+      } else {
+        bowling.push(`${bowl.perRunConceded}/run conceded`);
+      }
+    }
+
     if (bowl.perBallBowled != null) bowling.push(`${bowl.perBallBowled}/ball`);
     if (bowl.perDotBall != null) bowling.push(`${bowl.perDotBall}/dot`);
 	if (bowl.perMaidenOver != null) bowling.push(`${bowl.perMaidenOver}/maiden`);

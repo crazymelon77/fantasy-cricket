@@ -154,8 +154,12 @@ const saveTournament = async () => {
   
     // ensure the full container path exists, including the pair object
     const tgt = ensure(updated[stageIndex].scoring, [...basePath, key]);
-    tgt[key] = value === "" ? "" : Number(value);
-  
+    // ✅ Allow boolean values for checkbox toggles
+    if (typeof value === "boolean") {
+      tgt[key] = value;
+    } else {
+      tgt[key] = value === "" ? "" : Number(value);
+    }  
     setStages(updated);
   };
   
@@ -163,7 +167,14 @@ const saveTournament = async () => {
     const updated = [...stages];
     if (!updated[stageIndex].scoring) updated[stageIndex].scoring = {};
     const tgt = ensure(updated[stageIndex].scoring, path);
-    tgt[path[path.length - 1]] = value === "" ? "" : Number(value); // ✅
+	
+    const key = path[path.length - 1];
+    // ✅ Allow boolean values for checkbox toggles (e.g., SR/Econ scaling)
+    if (typeof value === "boolean") {
+      tgt[key] = value;
+    } else {
+      tgt[key] = value === "" ? "" : Number(value);
+    }	
     setStages(updated);
   };
   
@@ -924,16 +935,39 @@ const snapshotMatchXIs = async (tid, sid, mid) => {
 				}
 			  />
 			</div>
-            <div>
-              <label>Points per Run Conceded:</label>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <label style={{ margin: 0 }}>Points per Run Conceded:</label>
               <input
                 type="number"
                 value={stage.scoring?.bowling?.perRunConceded ?? 0}
                 onChange={(e) =>
                   handleScoringChange(sIdx, ["bowling", "perRunConceded"], e.target.value)
                 }
+                style={{ width: "90px" }}
               />
-            </div>
+
+              <label style={{ margin: 0, display: "flex", alignItems: "center", gap: "6px" }}>
+                <input
+                  type="checkbox"
+                  checked={stage.scoring?.bowling?.useEconWeighting || false}
+                  onChange={(e) =>
+                    handleScoringChange(sIdx, ["bowling", "useEconWeighting"], e.target.checked)
+                  }
+                />
+                Scale by Econ
+              </label>
+
+              <label style={{ margin: 0 }}>Target Econ:</label>
+              <input
+                type="number"
+                step="0.1"
+                value={stage.scoring?.bowling?.targetEcon ?? 6}
+                onChange={(e) =>
+                  handleScoringChange(sIdx, ["bowling", "targetEcon"], e.target.value)
+                }
+                style={{ width: "90px" }}
+              />
+            </div>		
             <div>
               <label>Points per Wide:</label>
               <input
