@@ -45,6 +45,7 @@ const PlayerBreakdown = ({ p, scoring }) => {
       ["won", "Win Bonus"],
 	  ["mom", "MOM Bonus"],
     ],
+	Boosters: [],
   };
 
   return (
@@ -60,6 +61,18 @@ const PlayerBreakdown = ({ p, scoring }) => {
 	  <tbody>
 		{Object.entries(breakdownOrder).map(([category, metrics]) => {
 		  const pts = p.points || {};
+          const boosterDelta =
+            p?.boosterEnabled === true &&
+            p?.boosterEffect &&
+            p.boosterEffect.delta != null
+              ? Number(p.boosterEffect.delta) || 0
+              : 0;
+
+          // Boosters section only appears when boosters are enabled AND there is a non-zero effect
+          if (category === "Boosters") {
+            if (boosterDelta === 0) return null;
+          }
+		  
 		  const catPoints =
 			category === "Batting"
 			  ? pts.batting ?? 0
@@ -67,10 +80,12 @@ const PlayerBreakdown = ({ p, scoring }) => {
 			  ? pts.bowling ?? 0
 			  : category === "Fielding"
 			  ? pts.fielding ?? 0
-			  : pts.general ?? 0;
+			  : category === "General"
+              ? pts.general ?? 0
+              : boosterDelta;
 
 		  const rows = metrics.filter(([key]) => p[key] !== undefined);
-		  if (rows.length === 0) return null;
+		  if (category !== "Boosters" && rows.length === 0) return null;
 
 		  const isOpen = !!openSections[category];
 
@@ -95,6 +110,7 @@ const PlayerBreakdown = ({ p, scoring }) => {
 
 			  {/* Collapsible content */}
 			  {isOpen &&
+			    category !== "Boosters" &&
 				rows.map(([key, label]) => {
 				  const val = Number(p[key]) || 0;
 				  let pointsEarned = 0;
@@ -178,6 +194,19 @@ const PlayerBreakdown = ({ p, scoring }) => {
 					</tr>
 				  );
 				})}
+				
+              {/* Boosters section content */}
+              {isOpen &&
+                category === "Boosters" &&
+                boosterDelta !== 0 && (
+                  <tr key="boosterEffect">
+                    <td>Booster</td>
+                    <td>{p.boosterEffect.boosterName || p.boosterEffect.boosterId || ""}</td>
+                    <td>
+                      {(boosterDelta > 0 ? "+" : "") + boosterDelta}
+                    </td>
+                  </tr>
+                )}
 			</React.Fragment>
 		  );
 		})}

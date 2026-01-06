@@ -26,6 +26,7 @@ const JoinTournament = () => {
   const [teamsByStage, setTeamsByStage] = useState({});
   const [playersByTeam, setPlayersByTeam] = useState({});
   const [loading, setLoading] = useState(true);
+  const [allBoosters, setAllBoosters] = useState([]);
 
   const [user, setUser] = useState(null);
   const [joined, setJoined] = useState(false);
@@ -46,6 +47,76 @@ const JoinTournament = () => {
   const [expandedPlayer, setExpandedPlayer] = React.useState(null);
   
   const [playerSort, setPlayerSort] = useState({ field: "total", dir: "desc" });
+
+  const normalizeSel = (sel) => ({
+    ...sel,
+    boosterId: sel?.boosterId ?? "none",
+  });
+
+  const getStageEnabledBoosters = (stage) => {
+    if (!stage?.enableBoosters) return [];
+
+    const hydrate = (id, name) => {
+      const bid = String(id);
+      const found = allBoosters.find((b) => String(b.id) === bid);
+      return {
+        id: bid,
+        name: found?.name || name || bid,
+        description: found?.description || "",
+      };
+    };
+
+
+    // Shape A: stage.boosters = [{ id, name, enabled }, ...]
+    if (Array.isArray(stage.boosters) && stage.boosters.length) {
+      return stage.boosters
+        .filter((b) => b?.enabled)
+        .map((b) =>  hydrate(b.id, b.name));
+    }
+
+    // Shape B: stage.boostersEnabled = ["id1","id2",...]
+    // Shape C: stage.boostersEnabled = [{ id, name }, ...]
+    if (Array.isArray(stage.boostersEnabled) && stage.boostersEnabled.length) {
+      const first = stage.boostersEnabled[0];
+
+      // object[]
+      if (first && typeof first === "object") {
+        return stage.boostersEnabled
+          .filter((b) => b?.id)
+          .map((b) =>  hydrate(b.id, b.name));
+      }
+
+      // string[]
+      return stage.boostersEnabled.map((bid) => hydrate(bid)); 
+    }
+
+    return [];
+  };
+  
+  // Keep existing call sites working
+  const getStageEnabledBoosterIds = (stage) => {
+    return getStageEnabledBoosters(stage).map((b) => b.id);
+  };
+
+  const getUsedBoosters = (stageSelections) => {
+    const used = new Set();
+    (stageSelections || []).forEach((sel) => {
+      const bid = sel?.boosterId;
+      if (bid && bid !== "none") used.add(bid);
+    });
+    return used;
+  };  
+
+  const handleBoosterChange = (stageId, playerId, boosterId) => {
+    setSelectedPlayers((prev) => {
+      const cur = prev[stageId] || [];
+      const next = cur.map((sel) =>
+        sel.playerId === playerId ? { ...sel, boosterId: boosterId || "none" } : sel
+      );
+      return { ...prev, [stageId]: sortByRole(next, resolvePlayer) };
+    });
+  };  
+  
   
   const recalcBudget = (stageId, team) => {
     const totalSpent = team.reduce((sum, p) => sum + (p.cost || 0), 0);
@@ -143,6 +214,11 @@ const JoinTournament = () => {
         }
         setTeamsByStage(teamsData);
         setPlayersByTeam(playersData);
+
+        // boosters (global list)
+        const boostersSnap = await getDocs(collection(db, "boosters"));
+        const boostersList = boostersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setAllBoosters(boostersList);
       } catch (err) {
         console.error("Error fetching tournament:", err);
       } finally {
@@ -166,8 +242,8 @@ const JoinTournament = () => {
 		if (rec.stages) {
 		  const sortedStages = {};
 		  Object.keys(rec.stages).forEach(stageId => {
-			const team = rec.stages[stageId] || [];
-			sortedStages[stageId] = sortByRole(team, resolvePlayer);
+            const team = (rec.stages[stageId] || []).map(normalizeSel);
+            sortedStages[stageId] = sortByRole(team, resolvePlayer);
 		  });
 
 		  setSelectedPlayers(sortedStages);
@@ -245,11 +321,11 @@ const JoinTournament = () => {
     // build new selection
     const newSelection = exists
       ? stagePlayers.filter((p) => p.playerId !== player.id)
-      : [...stagePlayers, { playerId: player.id, teamId: player.team }];
+      : [...stagePlayers, { playerId: player.id, teamId: player.team, boosterId: "none" }];
   
     // update selection state
 	// update selection state (always sorted)
-	const sortedSelection = sortByRole(newSelection, resolvePlayer);
+	const sortedSelection = sortByRole(newSelection.map(normalizeSel), resolvePlayer);
 	const updated = { ...selectedPlayers, [stageId]: sortedSelection };
 	setSelectedPlayers(updated);
 	
@@ -501,7 +577,7 @@ const JoinTournament = () => {
     }
   
     // ✅ Save locally
-    const selections = team.map((p) => ({ playerId: p.id, teamId: p.team }));
+    const selections = team.map((p) => ({ playerId: p.id, teamId: p.team, boosterId: "none" }));
     setSelectedPlayers((prev) => ({ ...prev, [stageId]: selections }));
   
     alert("Random XI generated! Review and click Save Team to confirm.");
@@ -514,7 +590,7 @@ const JoinTournament = () => {
     if (!user) return;
   
     const stage = stages.find((s) => s.id === stageId);
-    const stageSelections = selectedPlayers[stageId] || [];
+    const stageSelections = (selectedPlayers[stageId] || []).map(normalizeSel);
     const total = Number(stage.budget || 0);
     const remaining = Number(budgetLeftByStage[stageId] ?? total);
   
@@ -547,7 +623,30 @@ const JoinTournament = () => {
     if (allRounders > (roleComp.allRounder || 0)) violations.push("Too many all rounders");
     if (maxFromSameTeam > (roleComp.sameTeamMax || 11)) violations.push("Too many from one team");
     if (remaining < 0) violations.push("Over budget");
-	
+
+    // --- Booster validation ---
+    const enabledBoosterIds = getStageEnabledBoosterIds(stage);
+    if (enabledBoosterIds.length > 0) {
+      const chosen = stageSelections
+        .map((s) => s.boosterId)
+        .filter((bid) => bid && bid !== "none");
+
+      const chosenSet = new Set(chosen);
+      if (chosen.length !== chosenSet.size) {
+        violations.push("Boosters cannot be used on multiple players");
+      }
+
+      // must use ALL enabled boosters exactly once
+      const enabledSet = new Set(enabledBoosterIds);
+      const allEnabledChosen =
+        chosen.length === enabledBoosterIds.length &&
+        enabledBoosterIds.every((bid) => chosenSet.has(bid)) &&
+        [...chosenSet].every((bid) => enabledSet.has(bid));
+
+      if (!allEnabledChosen) {
+        violations.push(`Select all enabled boosters (${enabledBoosterIds.length}) and use each once`);
+      }
+    }	
 	// --- Substitution validation (UI-driven, no diff logic) ---
 	const userRef = doc(db, "user_teams", user.uid);
 	const userSnap = await getDoc(userRef);
@@ -596,6 +695,10 @@ const JoinTournament = () => {
 	 
 	// 🔒 Write XI only for matches that are NOT locked
 	const teamIds = stageSelections.map(sel => sel.playerId);
+    const boostersByPlayer = stageSelections.reduce((acc, sel) => {
+      acc[sel.playerId] = sel.boosterId ?? "none";
+      return acc;
+    }, {});	
 	const matchesSnap = await getDocs(
 	  collection(db, "tournaments", id, "stages", stageId, "matches")
 	);
@@ -626,6 +729,7 @@ const JoinTournament = () => {
 		  team: teamIds, 
 		  updatedAt: serverTimestamp(),
 		  subsUsed: subsUsed,
+		  boosters: boostersByPlayer,
 		},
 		{ merge: true }
 	  );
@@ -685,15 +789,23 @@ const JoinTournament = () => {
 		  "11s", user.uid
 		);
 	  const xiSnap = await getDoc(xiRef);
-	  if (xiSnap.exists()) {
-		  matchData.userXI = xiSnap.data().team || [];
-		  
-		  console.log(`[DB READ] Match ${m.id}: XI found. Player Count: ${matchData.userXI.length}`);
-	  } else {
-		  matchData.userXI = [];
-		  
-		  console.log(`[DB READ] Match ${m.id}: NO XI found.`);
-	  }
+      if (xiSnap.exists()) {
+        const xi = xiSnap.data() || {};
+      
+        matchData.userXI = xi.team || [];
+        matchData.userBoosters = xi.boosters || {};
+        matchData.userBoosterEffects = xi.boosterEffects || {};
+      
+        console.log(
+      	`[DB READ] Match ${m.id}: XI found. Player Count: ${matchData.userXI.length}`
+        );
+      } else {
+        matchData.userXI = [];
+        matchData.userBoosters = {};
+        matchData.userBoosterEffects = {};
+      
+        console.log(`[DB READ] Match ${m.id}: NO XI found.`);
+      }
  
       results.push(matchData);
     }
@@ -884,6 +996,8 @@ const JoinTournament = () => {
         const maxFromSameTeam = Math.max(0, ...Object.values(teamCounts));
 
         const roleComp = stage.roleComposition || {};
+		const enabledBoosters = getStageEnabledBoosters(stage);
+		
         const errors = [];
         if (batsmen > (roleComp.batsman || 0)) errors.push("Too many batsmen");
         if (bowlers > (roleComp.bowler || 0)) errors.push("Too many bowlers");
@@ -933,6 +1047,25 @@ const JoinTournament = () => {
 					<div key={idx}>{line}</div>
 				  ))}
 				</div>
+				
+				{stage.enableBoosters && (
+				  <div className="text-sm text-gray-700 mt-2">
+					<div><b>Boosters:</b></div>
+					<div className="mt-1">
+					  {enabledBoosters.length > 0 ? (
+						enabledBoosters.map((b) => (
+						  <div key={b.id} className="ml-4">
+							<span className="font-semibold">{b.name}</span>
+							{b.description ? `: ${b.description}` : ""}
+						  </div>
+						))
+					  ) : (
+						<div className="ml-4">None</div>
+					  )}
+					</div>
+				  </div>
+				)}
+				
 
 				<p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
 				  <b>Role Composition:</b> <br />
@@ -959,7 +1092,10 @@ const JoinTournament = () => {
 						  const stat = match.players.find(mp => mp.id === pid);
 						  if (!stat) return null;
 						  const pts = stat.points || {};
-						  totalPoints += pts.total ?? 0;
+                          const boosterDelta = stage.enableBoosters
+                            ? (match.userBoosterEffects?.[pid]?.delta ?? 0)
+                            : 0;
+                          totalPoints += (pts.total ?? 0) + boosterDelta;
 							return (
 							  <React.Fragment key={pid}>
 								<tr>
@@ -968,7 +1104,9 @@ const JoinTournament = () => {
 								  <td className="border px-2 py-1 text-right">{pts.bowling ?? 0}</td>
 								  <td className="border px-2 py-1 text-right">{pts.fielding ?? 0}</td>
 								  <td className="border px-2 py-1 text-right">{pts.general ?? 0}</td>
-								  <td className="border px-2 py-1 text-right font-semibold">{pts.total ?? 0}</td>
+                                  <td className="border px-2 py-1 text-right font-semibold">
+                                    {(pts.total ?? 0) + (stage.enableBoosters ? (match.userBoosterEffects?.[pid]?.delta ?? 0) : 0)}
+                                  </td>
 								  <td className="border px-2 py-1 text-center">
 									<button
 									  className="btn-secondary"
@@ -981,9 +1119,15 @@ const JoinTournament = () => {
 
 								{expandedPlayer === pid && (
 								  <tr>
-									<td colSpan={7} className="bg-gray-50 p-2">
+									<td colSpan={stage.enableBoosters ? 8 : 7} className="bg-gray-50 p-2">
 									  <PlayerBreakdown
-										p={{ id: pid, ...resolvePlayer(pid), points: pts }}
+										p={{
+										  id: pid,
+										  ...stat,
+										  points: pts,
+										  boosterEnabled: !!stage.enableBoosters,
+										  boosterEffect: match.userBoosterEffects?.[pid] || null,
+										}}
 										scoring={stage.scoring}
 									  />
 									</td>
@@ -1093,16 +1237,39 @@ const JoinTournament = () => {
 									  <th className="border px-2 py-1 text-left">Player</th>
 									  <th className="border px-2 py-1 text-right">Role</th>
 									  <th className="border px-2 py-1 text-right">Team</th>
+									  {stage.enableBoosters && (
+									    <th className="border px-2 py-1 text-right">Booster</th>
+									  )}
 									</tr>
 								  </thead>
 								  <tbody>
 									{sortByRole((match.userXI || []).map(pid => ({ playerId: pid })), resolvePlayer).map(sel => {
 									  const p = resolvePlayer(sel.playerId);
+                                      const boosterId = match.userBoosters?.[sel.playerId];
+                                      const boosterName =
+                                        boosterId && boosterId !== "none"
+                                          ? (allBoosters.find(b => String(b.id) === String(boosterId))?.name || boosterId)
+                                          : "";									  
 									  return (
 										<tr key={sel.playerId}>
 										  <td className="border px-2 py-1">{p?.playerName || sel.playerId}</td>
 										  <td className="border px-2 py-1 text-right">{p?.role || ""}</td>
 										  <td className="border px-2 py-1 text-right">{p?.team || ""}</td>
+										  {stage.enableBoosters && (
+											<td className="border px-2 py-1">
+											  {(() => {
+												const boosterId =
+												  match?.boosters?.[sel.playerId] ||
+												  match?.userBoosters?.[sel.playerId] ||
+												  "none";
+
+												if (!boosterId || boosterId === "none") return "";
+
+												const booster = allBoosters.find(b => b.id === boosterId);
+												return booster ? booster.name : boosterId;
+											  })()}
+											</td>
+										  )}
 										</tr>
 									  );
 									})}
@@ -1147,83 +1314,112 @@ const JoinTournament = () => {
 									>
 									  Gen {playerSort.field === "general" && (playerSort.dir === "asc" ? "▲" : "▼")}
 									</th>
+									{stage.enableBoosters && (
+                                      <th className="border px-2 py-1 text-right">Booster</th>
+                                    )}									  
 									<th 
 									  className="border px-2 py-1 text-right cursor-pointer"
 									  onClick={() => handlePlayerSort("total")}
 									>
 									  Total {playerSort.field === "total" && (playerSort.dir === "asc" ? "▲" : "▼")}
-									</th>
+									</th>									  
 									<th className="border px-2 py-1 text-center">Details</th>
 								  </tr>
 								</thead>
 
-<tbody>
-  {xi
-    .map(pid => {
-      const stat = match.players.find((mp) => mp.id === pid);
-      if (!stat) return null;
-      const pts = stat.points || {};
-      return { pid, stat, pts, player: resolvePlayer(pid) };
-    })
-    .filter(item => item !== null)
-    .sort((a, b) => {
-      const { field, dir } = playerSort;
-      let valA, valB;
-      
-      if (field === "total") {
-        valA = a.pts.total ?? 0;
-        valB = b.pts.total ?? 0;
-      } else if (["batting", "bowling", "fielding", "general"].includes(field)) {
-        valA = a.pts[field] ?? 0;
-        valB = b.pts[field] ?? 0;
-      } else if (field === "name") {
-        valA = a.player?.playerName || "";
-        valB = b.player?.playerName || "";
-      }
-      
-      if (valA < valB) return dir === "asc" ? -1 : 1;
-      if (valA > valB) return dir === "asc" ? 1 : -1;
-      return 0;
-    })
-    .map(({ pid, stat, pts, player }) => {
-      return (
-        <React.Fragment key={pid}>
-          <tr>
-            <td className="border px-2 py-1">{player?.playerName}</td>
-            <td className="border px-2 py-1 text-right">{pts.batting ?? 0}</td>
-            <td className="border px-2 py-1 text-right">{pts.bowling ?? 0}</td>
-            <td className="border px-2 py-1 text-right">{pts.fielding ?? 0}</td>
-            <td className="border px-2 py-1 text-right">{pts.general ?? 0}</td>
-            <td className="border px-2 py-1 text-right font-semibold">
-              {pts.total ?? 0}
-            </td>
-            <td className="border px-2 py-1 text-center">
-              <button
-                className="btn-secondary"
-                onClick={() => togglePlayerDetails(pid)}
-              >
-                {expandedPlayer === pid ? "Hide" : "Details"}
-              </button>
-            </td>
-          </tr>
+								<tbody>
+								  {xi
+									.map(pid => {
+									  const stat = match.players.find((mp) => mp.id === pid);
+									  if (!stat) return null;
+									  const pts = stat.points || {};
+									  return { pid, stat, pts, player: resolvePlayer(pid) };
+									})
+									.filter(item => item !== null)
+									.sort((a, b) => {
+									  const { field, dir } = playerSort;
+									  let valA, valB;
+									  
+									  if (field === "total") {
+                                        const aBoost = stage.enableBoosters ? (match.userBoosterEffects?.[a.pid]?.delta ?? 0) : 0;
+                                        const bBoost = stage.enableBoosters ? (match.userBoosterEffects?.[b.pid]?.delta ?? 0) : 0;
+                                        valA = (a.pts.total ?? 0) + aBoost;
+                                        valB = (b.pts.total ?? 0) + bBoost;
+									  } else if (["batting", "bowling", "fielding", "general"].includes(field)) {
+										valA = a.pts[field] ?? 0;
+										valB = b.pts[field] ?? 0;
+									  } else if (field === "name") {
+										valA = a.player?.playerName || "";
+										valB = b.player?.playerName || "";
+									  }
+									  
+									  if (valA < valB) return dir === "asc" ? -1 : 1;
+									  if (valA > valB) return dir === "asc" ? 1 : -1;
+									  return 0;
+									})
+									.map(({ pid, stat, pts, player }) => {
+									  return (
+										<React.Fragment key={pid}>
+										  <tr>
+											<td className="border px-2 py-1">{player?.playerName}</td>
+											<td className="border px-2 py-1 text-right">{pts.batting ?? 0}</td>
+											<td className="border px-2 py-1 text-right">{pts.bowling ?? 0}</td>
+											<td className="border px-2 py-1 text-right">{pts.fielding ?? 0}</td>
+											<td className="border px-2 py-1 text-right">{pts.general ?? 0}</td>
+											
+											{stage.enableBoosters && (
+											  <td className="border px-2 py-1 text-right">
+												{(() => {
+												  const eff = match.userBoosterEffects?.[pid];
+												  if (!eff || eff.delta == null || eff.delta === 0) return "";
+												  const name =
+													eff.boosterName ||
+													(allBoosters.find(b => String(b.id) === String(eff.boosterId))?.name) ||
+													eff.boosterId ||
+													"";
+												  const delta = Number(eff.delta) || 0;
+												  const sign = delta > 0 ? "+" : "";
+												  return name ? `${name}: ${sign}${delta}` : `${sign}${delta}`;
+												})()}
+											  </td>
+											)}			
+											<td className="border px-2 py-1 text-right font-semibold">
+                                              {(pts.total ?? 0) + (stage.enableBoosters ? (match.userBoosterEffects?.[pid]?.delta ?? 0) : 0)}
 
-          {expandedPlayer === pid && (
-            <tr>
-              <td colSpan={7} className="bg-gray-50 p-2">
-                <PlayerBreakdown
-                  p={{ id: pid, ...stat, points: pts }}
-                  scoring={stage.scoring}
-                />
-              </td>
-            </tr>
-          )}
-        </React.Fragment>
-      );
-    })}
-</tbody>
+											</td>
+											<td className="border px-2 py-1 text-center">
+											  <button
+												className="btn-secondary"
+												onClick={() => togglePlayerDetails(pid)}
+											  >
+												{expandedPlayer === pid ? "Hide" : "Details"}
+											  </button>
+											</td>
+										  </tr>
+
+										  {expandedPlayer === pid && (
+											<tr>
+											  <td colSpan={stage.enableBoosters ? 8 : 7} className="bg-gray-50 p-2">
+												<PlayerBreakdown
+												  p={{
+												 	 id: pid,
+												 	 ...stat,
+												 	 points: pts,
+													 boosterEnabled: !!stage.enableBoosters,
+												 	 boosterEffect: match.userBoosterEffects?.[pid] || null,
+												  }}
+												  scoring={stage.scoring}
+												/>
+											  </td>
+											</tr>
+										  )}
+										</React.Fragment>
+									  );
+									})}
+								</tbody>
 								<tfoot>
 								  <tr>
-									<td className="text-right font-semibold" colSpan="6">
+									<td className="text-right font-semibold" colSpan={stage.enableBoosters ? 7 : 6}>
 									  Match Total
 									</td>
 									<td className="text-right font-semibold">
@@ -1282,9 +1478,10 @@ const JoinTournament = () => {
 
 				  const isSameXI = (a, b) => {
 					if (a.length !== b.length) return false;
-					const aIds = a.map(p => p.playerId).sort();
-					const bIds = b.map(p => p.playerId).sort();
-					return JSON.stringify(aIds) === JSON.stringify(bIds);
+					const key = (p) => `${p.playerId}:${p.boosterId ?? "none"}`;
+					const aKeys = a.map(key).sort();
+					const bKeys = b.map(key).sort();
+					return JSON.stringify(aKeys) === JSON.stringify(bKeys);
 				  };
 
 				  const hasChanges = !isSameXI(currentTeam, savedTeam);
@@ -1345,12 +1542,18 @@ const JoinTournament = () => {
                         <th className="border px-2 py-1">Cost</th>
 						<th className="border px-2 py-1">Points</th>
                         <th className="border px-2 py-1">Action</th>
+						{stage.enableBoosters && (
+						  <th className="border px-2 py-1">Booster</th>
+						)}
                       </tr>
                     </thead>
 					<tbody>
 					  {sortByRole(stageSelections, resolvePlayer).map((sel, i) => {
 						const player = resolvePlayer(sel.playerId);
 						if (!player) return null;
+                        const enabledBoosters = getStageEnabledBoosters(stage);
+                        const used = getUsedBoosters(stageSelections);
+                        const current = sel.boosterId ?? "none";						
 						return (
 						  <tr key={i}>
 							<td className="border px-2 py-1">{player.playerName}</td>
@@ -1368,11 +1571,36 @@ const JoinTournament = () => {
 								Drop
 							  </button>
 							</td>
+							{stage.enableBoosters && (
+							  <td className="border px-2 py-1">
+								{enabledBoosters.length === 0 ? (
+								  <span className="text-gray-400 text-sm">—</span>
+								) : (
+								  <select
+									value={current}
+									onChange={(e) =>
+									  handleBoosterChange(stage.id, player.id, e.target.value)
+									}
+									className="border rounded px-2 py-1 text-sm"
+								  >
+									<option value="none">None</option>
+									{enabledBoosters.map((b) => {
+									  const isUsedElsewhere = used.has(b.id) && current !== b.id;
+									  return (
+										<option key={b.id} value={b.id} disabled={isUsedElsewhere}>
+										  {b.name}
+										</option>
+									  );
+									})}
+								  </select>
+								)}
+							  </td>
+							)}						  
 						  </tr>
 						);
 					  })}
 					</tbody>
-									  </table>
+				  </table>
                 )}
                 {/* Available Players */}
                 <h3 className="font-semibold mb-2">Available Players</h3>

@@ -29,6 +29,14 @@ const EditTournament = () => {
   const [loading, setLoading] = useState(true);
   const [team1, setTeam1] = useState("TBD");
   const [team2, setTeam2] = useState("TBD");
+  
+  const [allBoosters, setAllBoosters] = useState([]);
+  const [boosterOverrides, setBoosterOverrides] = useState(() =>
+    Object.fromEntries(
+      stages?.map((s) => [s.id, {}]) || []
+    )
+  );
+
 
   // ---------- Save Tournament ----------
 const saveTournament = async () => {
@@ -39,14 +47,37 @@ const saveTournament = async () => {
       type: tournament.type || "classic",   // ✅ default
       active: tournament.active ?? false,   // ✅ default
     });
-    alert("Tournament saved");
-  } catch (err) {
-    console.error("Error saving tournament:", err);
-    alert("Failed to save tournament");
-  }
-};
+		alert("Tournament saved");
+	  } catch (err) {
+		console.error("Error saving tournament:", err);
+		alert("Failed to save tournament");
+	  }
+	};
+
+  useEffect(() => {
+    const loadBoosters = async () => {
+      const snap = await getDocs(collection(db, "boosters"));
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setAllBoosters(list);
+    };
+    loadBoosters();
+  }, []);
+  
+  const handleOverrideChange = (stageId, boosterId, key, newValue) => {
+    setBoosterOverrides((prev) => ({
+      ...prev,
+      [stageId]: {
+        ...(prev[stageId] || {}),
+        [boosterId]: {
+          ...(prev[stageId]?.[boosterId] || {}),
+          [key]: newValue,
+        },
+      },
+    }));
+  };
 
   
+
   // ---------- Fetch tournament, stages, teams, players ----------
   useEffect(() => {
     const fetchTournament = async () => {
@@ -75,10 +106,33 @@ const saveTournament = async () => {
 			 orderBy("order", "asc")
 		   )
 		 );
-       const matches = matchSnap.docs.map((m) => ({ id: m.id, ...m.data() }));
-   
-       return { ...base, matches }; // override any stale stage.matches field
-     })
+		const matches = matchSnap.docs.map((m) => ({ id: m.id, ...m.data() }));
+
+		// 🔹 Load booster overrides for this stage
+		let boosterData = {};
+		if (base.enableBoosters) {
+		  const boostersSnap = await getDocs(
+			collection(db, "tournaments", tournamentId, "stages", s.id, "boosters")
+		  );
+		  boostersSnap.forEach((b) => {
+			boosterData[b.id] = b.data().overrides || {};
+		  });
+		}
+
+		// merge into boosterOverrides state (outside setStages)
+		setBoosterOverrides((prev) => ({
+		  ...prev,
+		  [s.id]: boosterData,
+		}));
+
+		return {
+		  ...base,
+		  matches,
+		  enableBoosters: base.enableBoosters ?? false,
+		  boostersEnabled: base.boostersEnabled ?? [],
+		};
+
+	  })
    );
    setStages(stageList);
 
@@ -121,7 +175,7 @@ const saveTournament = async () => {
     };
     fetchTournament();
   }, [tournamentId, navigate]);
-
+  
   // ---------- Helpers ----------
   const ensure = (obj, path) => {
     // create nested objects if missing
@@ -233,26 +287,50 @@ const addStage = async () => {
     setTeamsByStage(t);
   };
 
-  const saveStage = async (stage) => {
-    try {
-      const { id, matches, team1, team2, matchDate, cutoffDate, ...payload } = stage;
-      const stageRef = doc(db, "tournaments", tournamentId, "stages", id);
-      await updateDoc(stageRef, payload);
-	  
-	  if (Array.isArray(matches)) {
-		  for (const match of matches) {
-			  if (!match.id) continue;
-			  await saveMatch(id, match);
-		  }
-	  }  
-	  
-      alert("Stage saved");
-	  
-    } catch (err) {
-      console.error("Error saving stage:", err);
-      alert("Failed to save stage");
+const saveStage = async (stage) => {
+  try {
+    const { id, matches, team1, team2, matchDate, cutoffDate, ...payload } = stage;
+    const stageRef = doc(db, "tournaments", tournamentId, "stages", id);
+
+    const boostersEnabled = stage.boostersEnabled || [];
+    const enableBoosters = boostersEnabled.length > 0;
+
+    await updateDoc(stageRef, {
+      ...payload,
+      boostersEnabled,
+      enableBoosters,
+    });
+
+    if (Array.isArray(matches)) {
+      for (const match of matches) {
+        if (!match.id) continue;
+        await saveMatch(id, match);
+      }
     }
-  };
+	
+	if (stage.enableBoosters && Array.isArray(stage.boostersEnabled)) {
+    for (const boosterId of stage.boostersEnabled) {
+        const overrides =
+        boosterOverrides[stage.id]?.[boosterId] || {};
+        await setDoc(
+          doc(db, "tournaments", tournamentId, "stages", stage.id, "boosters", boosterId),
+          {
+            enabled: true,
+            overrides,
+          },
+          { merge: true }
+        );
+      }
+    }
+
+
+    alert("Stage saved");
+  } catch (err) {
+    console.error("Error saving stage:", err);
+    alert("Failed to save stage");
+  }
+};
+
 
   // ---------- Matches ----------
   const addMatch = async (stageId) => {
@@ -681,6 +759,8 @@ const snapshotMatchXIs = async (tid, sid, mid) => {
       >
         <option value="classic">Classic</option>
       </select>
+	  
+
 
       <label>Active:</label>
       <input
@@ -690,6 +770,7 @@ const snapshotMatchXIs = async (tid, sid, mid) => {
           setTournament({ ...tournament, active: e.target.checked })
         }
       />
+	  
 	  
 	  <div style={{ marginTop: "10px", marginBottom: "20px" }}>
 		 <button onClick={saveTournament}>Save Tournament</button>
@@ -1049,6 +1130,153 @@ const snapshotMatchXIs = async (tid, sid, mid) => {
                 }
               />
             </div>
+			
+			<h4 className="font-semibold text-lg mt-4 mb-2">Boosters</h4>
+			
+{/* ================= Boosters Section ================= */}
+{allBoosters.map((b) => {
+  const isSelected = stage.boostersEnabled?.includes(b.id);
+  const overrides = boosterOverrides[stage.id]?.[b.id] || {};
+
+  return (
+    <div key={b.id} className="mb-3">
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            const updatedStages = stages.map((s) =>
+              s.id === stage.id
+                ? {
+                    ...s,
+                    boostersEnabled: checked
+                      ? [...(s.boostersEnabled || []), b.id]
+                      : (s.boostersEnabled || []).filter((id) => id !== b.id),
+                  }
+                : s
+            );
+            setStages(updatedStages);
+          }}
+          className="h-4 w-4"
+        />
+        <span className="font-semibold"><u>{b.name}</u></span>
+      </label>
+
+      {isSelected && (
+        <div className="ml-6 mt-2 space-y-2">
+          {b.rules?.map((rule, ri) => (
+  <div key={ri} className="mt-3 border-t pt-2">
+    <div className="font-semibold text-gray-700 mb-1">
+      {rule.label || (ri === 0 ? "Boost" : "Penalty")}
+    </div>
+
+    {/* Optional threshold for penalty rules */}
+    {"condition" in rule && (
+      <div className="flex items-center gap-2 mb-2 ml-4">
+        <span className="text-sm text-gray-600 w-24">Threshold:</span>
+        <input
+          type="number"
+          step="1"
+          value={
+            overrides[`rules[${ri}].condition.value`] ??
+            rule.condition?.value ??
+            0
+          }
+          onChange={(e) =>
+            handleOverrideChange(
+              stage.id,
+              b.id,
+              `rules[${ri}].condition.value`,
+              parseFloat(e.target.value)
+            )
+          }
+          className="border px-1 py-0.5 rounded w-20 text-sm"
+        />
+        <span className="text-xs text-gray-500">{rule.condition?.metric}</span>
+      </div>
+    )}
+
+    {/* All effects (boost or penalty) */}
+    {rule.effects?.map((eff, ei) => {
+      const metricKey = `rules[${ri}].effects[${ei}].metric`;
+      const typeKey = `rules[${ri}].effects[${ei}].type`;
+      const valKey = `rules[${ri}].effects[${ei}].value`;
+
+      const metricVal = overrides[metricKey] ?? eff.metric;
+      const typeVal = overrides[typeKey] ?? eff.type;
+      const val = overrides[valKey] ?? eff.value;
+
+      return (
+        <div
+          key={ei}
+          className="flex items-center gap-2 ml-4 mb-1 text-sm flex-wrap"
+        >
+          <span className="text-gray-600 w-16">
+            {rule.label || "Effect"}:
+          </span>
+
+          {/* Metric */}
+          <input
+            type="text"
+            value={metricVal}
+            onChange={(e) =>
+              handleOverrideChange(
+                stage.id,
+                b.id,
+                metricKey,
+                e.target.value
+              )
+            }
+            className="border px-1 py-0.5 rounded w-24 text-sm"
+          />
+
+          {/* Type */}
+          <select
+            value={typeVal}
+            onChange={(e) =>
+              handleOverrideChange(
+                stage.id,
+                b.id,
+                typeKey,
+                e.target.value
+              )
+            }
+            className="border rounded px-1 py-0.5 text-sm"
+          >
+            <option value="multiplier">Multiplier</option>
+            <option value="additive">Add Per Event</option>
+            <option value="offset">Offset</option>
+          </select>
+
+          {/* Value */}
+          <input
+            type="number"
+            step="0.1"
+            value={val}
+            onChange={(e) =>
+              handleOverrideChange(
+                stage.id,
+                b.id,
+                valKey,
+                parseFloat(e.target.value)
+              )
+            }
+            className="border px-1 py-0.5 rounded w-20 text-sm"
+          />
+        </div>
+      );
+    })}
+  </div>
+))}
+
+        </div>
+      )}
+    </div>
+  );
+})}
+
+
 
             {/* Matches */}
             <h4>Matches</h4>
@@ -1200,7 +1428,7 @@ const snapshotMatchXIs = async (tid, sid, mid) => {
             <button onClick={() => addTeam(stage.id)}>Add Team</button>
 
             <div style={{ marginTop: "10px" }}>
-              <button onClick={() => saveStage(stage)}>Save Stage</button>
+              <button className="btn-add" onClick={() => saveStage(stage)}>Save Stage</button>
             </div>
           </div>
         ))}

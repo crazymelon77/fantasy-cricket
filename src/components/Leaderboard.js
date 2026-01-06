@@ -43,6 +43,9 @@ const Leaderboard = () => {
 
   // Per-match locked squads: { [stageId]: { [matchId]: { [uid]: string[] /*playerIds*/ } } }
   const [managerMatchSquads, setManagerMatchSquads] = useState({});
+  
+  // Per-match booster effects (scored): { [stageId]: { [matchId]: { [uid]: { [playerId]: { boosterId, boosterName, delta } } } } }
+  const [managerMatchBoosterEffects, setManagerMatchBoosterEffects] = useState({});  
 
   const [expandedStages, setExpandedStages] = useState({});   // { uid: { stageId: true } }
   const [expandedMatches, setExpandedMatches] = useState({}); // { uid: { stageId: { matchId: true } } }
@@ -95,17 +98,19 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
       return next;
     });
 
-    // ✅ Load individual player stats (for totals)
-    const stats = await loadMatchStats(tournamentId, stageId, matchId);
-    setPlayerMatchTotals(prev => {
+    // ✅ Load boosterEffects per manager (from 11s docs)
+    setManagerMatchBoosterEffects(prev => {
       const next = { ...prev };
       if (!next[stageId]) next[stageId] = {};
-      Object.entries(stats).forEach(([pid, pts]) => {
-        if (!next[stageId][pid]) next[stageId][pid] = {};
-        next[stageId][pid][matchId] = pts.total ?? 0;
+      if (!next[stageId][matchId]) next[stageId][matchId] = {};
+
+      squadsSnap.forEach(sqDoc => {
+        const d = sqDoc.data() || {};
+        next[stageId][matchId][sqDoc.id] = d.boosterEffects || {};
       });
+
       return next;
-    });
+    });	
 
     // ✅ NEW: Load full statline documents (for PlayerBreakdown)
     const statsSnapFull = await getDocs(
@@ -489,16 +494,32 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
 											  {(managerMatchSquads[s.id][m.id][r.uid] || [])
 												// build array of objects with points
 												.map(pid => {
-												  const info = playerInfoByStage[s.id]?.[pid] || {};
-												  const pts = playerMatchTotals[s.id]?.[pid]?.[m.id] || 0;
-												  const statline = playerMatchStatlines[s.id]?.[m.id]?.[pid] || {};
-												  return { pid, info, pts, statline };
+												const info = playerInfoByStage[s.id]?.[pid] || {};
+												const statline = playerMatchStatlines[s.id]?.[m.id]?.[pid] || {};
+												return { pid, info, statline };
 												})
 												// 🔹 sort by match points (highest first)
-												.sort((a, b) => b.pts - a.pts)
+												  .sort((a, b) => {
+												  const boosterEnabled = !!stages.find(x => x.id === s.id)?.enableBoosters;
+												  const aBooster = boosterEnabled
+													? Number(managerMatchBoosterEffects?.[s.id]?.[m.id]?.[r.uid]?.[a.pid]?.delta ?? 0)
+													: 0;
+												  const bBooster = boosterEnabled
+													? Number(managerMatchBoosterEffects?.[s.id]?.[m.id]?.[r.uid]?.[b.pid]?.delta ?? 0)
+													: 0;
+												  const aPts = Number(a.statline?.points?.total ?? 0) + aBooster;
+												  const bPts = Number(b.statline?.points?.total ?? 0) + bBooster;
+												  return bPts - aPts;
+												})
 												// render
-												.map(({ pid, info, pts, statline }) => {
+												.map(({ pid, info, statline }) => {
 												  const stageScoring = stages.find(x => x.id === s.id)?.scoring || {};
+                                                  const boosterEnabled = !!stages.find(x => x.id === s.id)?.enableBoosters;
+                                                  const boosterEffect =
+                                                    managerMatchBoosterEffects?.[s.id]?.[m.id]?.[r.uid]?.[pid] || null
+												  const pts =
+												    Number(statline?.points?.total ?? 0) +
+												    (boosterEnabled ? Number(boosterEffect?.delta ?? 0) : 0);												
 												  const isOpen = !!(expandedPlayers[s.id]?.[m.id]?.[pid]);
 
 												  return (
@@ -522,7 +543,13 @@ const toggleMatchExpand = async (uid, stageId, matchId) => {
 														<tr>
 														  <td colSpan={5} style={{ background: "#f9fafb" }}>
 															<PlayerBreakdown
-															  p={{ id: pid, ...statline, points: statline.points || {} }}
+															  p={{
+                                                                id: pid,
+                                                                ...statline,
+                                                                points: statline.points || {},
+                                                                boosterEnabled: boosterEnabled,
+                                                                boosterEffect: boosterEffect,
+                                                              }}
 															  scoring={stageScoring}
 															/>
 														  </td>
