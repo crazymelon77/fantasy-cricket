@@ -281,10 +281,13 @@ const saveStage = async (stage) => {
     const { id, matches, team1, team2, matchDate, cutoffDate, ...payload } = stage;
     const stageRef = doc(db, "tournaments", tournamentId, "stages", id);
 
+    const boostersEnabled = stage.boostersEnabled || [];
+    const enableBoosters = boostersEnabled.length > 0;
+
     await updateDoc(stageRef, {
       ...payload,
-      enableBoosters: stage.enableBoosters ?? false,   // ✅ save booster toggle
-      boostersEnabled: stage.boostersEnabled ?? [],    // ✅ save selected boosters (future step)
+      boostersEnabled,
+      enableBoosters,
     });
 
     if (Array.isArray(matches)) {
