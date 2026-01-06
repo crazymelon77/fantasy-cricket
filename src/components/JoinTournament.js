@@ -56,11 +56,22 @@ const JoinTournament = () => {
   const getStageEnabledBoosters = (stage) => {
     if (!stage?.enableBoosters) return [];
 
+    const hydrate = (id, name) => {
+      const bid = String(id);
+      const found = allBoosters.find((b) => String(b.id) === bid);
+      return {
+        id: bid,
+        name: found?.name || name || bid,
+        description: found?.description || "",
+      };
+    };
+
+
     // Shape A: stage.boosters = [{ id, name, enabled }, ...]
     if (Array.isArray(stage.boosters) && stage.boosters.length) {
       return stage.boosters
         .filter((b) => b?.enabled)
-        .map((b) => ({ id: String(b.id), name: b.name || String(b.id) }));
+        .map((b) =>  hydrate(b.id, b.name));
     }
 
     // Shape B: stage.boostersEnabled = ["id1","id2",...]
@@ -72,15 +83,11 @@ const JoinTournament = () => {
       if (first && typeof first === "object") {
         return stage.boostersEnabled
           .filter((b) => b?.id)
-          .map((b) => ({ id: String(b.id), name: b.name || String(b.id) }));
+          .map((b) =>  hydrate(b.id, b.name));
       }
 
-      // string[] -> map through global boosters list (fallback to id)
-      const ids = stage.boostersEnabled.map((x) => String(x));
-      return ids.map((bid) => {
-        const found = allBoosters.find((b) => String(b.id) === bid);
-        return { id: bid, name: found?.name || bid };
-      });
+      // string[]
+      return stage.boostersEnabled.map((bid) => hydrate(bid)); 
     }
 
     return [];
@@ -211,7 +218,7 @@ const JoinTournament = () => {
         // boosters (global list)
         const boostersSnap = await getDocs(collection(db, "boosters"));
         const boostersList = boostersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setAllBoosters(boostersList);		
+        setAllBoosters(boostersList);
       } catch (err) {
         console.error("Error fetching tournament:", err);
       } finally {
@@ -955,6 +962,8 @@ const JoinTournament = () => {
         const maxFromSameTeam = Math.max(0, ...Object.values(teamCounts));
 
         const roleComp = stage.roleComposition || {};
+		const enabledBoosters = getStageEnabledBoosters(stage);
+		
         const errors = [];
         if (batsmen > (roleComp.batsman || 0)) errors.push("Too many batsmen");
         if (bowlers > (roleComp.bowler || 0)) errors.push("Too many bowlers");
@@ -1004,6 +1013,25 @@ const JoinTournament = () => {
 					<div key={idx}>{line}</div>
 				  ))}
 				</div>
+				
+				{stage.enableBoosters && (
+				  <div className="text-sm text-gray-700 mt-2">
+					<div><b>Boosters:</b></div>
+					<div className="mt-1">
+					  {enabledBoosters.length > 0 ? (
+						enabledBoosters.map((b) => (
+						  <div key={b.id} className="ml-4">
+							<span className="font-semibold">{b.name}</span>
+							{b.description ? `: ${b.description}` : ""}
+						  </div>
+						))
+					  ) : (
+						<div className="ml-4">None</div>
+					  )}
+					</div>
+				  </div>
+				)}
+				
 
 				<p className={`${errors.length ? "text-red-600" : "text-gray-600"}`}>
 				  <b>Role Composition:</b> <br />
