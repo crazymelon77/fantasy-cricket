@@ -876,6 +876,9 @@ const JoinTournament = () => {
     const bowl = scoring.bowling || {};
     const bowling = [];
 
+    if (bowl.perBallBowled != null) bowling.push(`${bowl.perBallBowled}/ball`);
+    if (bowl.perDotBall != null) bowling.push(`${bowl.perDotBall}/dot`);
+	if (bowl.perMaidenOver != null) bowling.push(`${bowl.perMaidenOver}/maiden`);
     // Runs conceded display (optionally scaled by target econ)
     if (bowl.perRunConceded != null) {
       if (bowl.useEconWeighting) {
@@ -885,11 +888,6 @@ const JoinTournament = () => {
         bowling.push(`${bowl.perRunConceded}/run conceded`);
       }
     }
-
-    if (bowl.perBallBowled != null) bowling.push(`${bowl.perBallBowled}/ball`);
-    if (bowl.perDotBall != null) bowling.push(`${bowl.perDotBall}/dot`);
-	if (bowl.perMaidenOver != null) bowling.push(`${bowl.perMaidenOver}/maiden`);
-    if (bowl.perRunConceded != null) bowling.push(`${bowl.perRunConceded}/run conceded`);
     if (bowl.perWide != null) bowling.push(`${bowl.perWide}/wide`);
     if (bowl.perNoBall != null) bowling.push(`${bowl.perNoBall}/no ball`);
     if (bowl.perWicket != null) bowling.push(`${bowl.perWicket}/wicket`);
@@ -1050,7 +1048,7 @@ const JoinTournament = () => {
 				
 				{stage.enableBoosters && (
 				  <div className="text-sm text-gray-700 mt-2">
-					<div><b>Boosters:</b></div>
+					<div><br /><b>Boosters:</b></div>
 					<div className="mt-1">
 					  {enabledBoosters.length > 0 ? (
 						enabledBoosters.map((b) => (
