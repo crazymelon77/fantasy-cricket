@@ -19,6 +19,7 @@ const ViewSquads = () => {
   const [loading, setLoading] = useState(true);
   const [tournament, setTournament] = useState(null);
   const [stages, setStages] = useState([]);
+  const [allBoosters, setAllBoosters] = useState([]);
   // playersByStage: { [stageId]: { [playerId]: { id, playerName, role, team } } }
   const [playersByStage, setPlayersByStage] = useState({});
   // participants: [{ uid, label, squadsByStage }]
@@ -27,6 +28,10 @@ const ViewSquads = () => {
   const [expandedStages, setExpandedStages] = useState({}); 
   // structure: { [managerUid]: { [stageId]: true/false } }
 
+  const resolveBoosterName = (boosterId) => {
+    if (!boosterId || boosterId === "none") return "—";
+    return allBoosters.find((b) => b.id === boosterId)?.name || boosterId;
+  };
 
   const resolvePlayer = (stageId, playerId) =>
     playersByStage[stageId]?.[playerId];
@@ -55,6 +60,11 @@ const ViewSquads = () => {
           ...s.data(),
         }));
         setStages(stageList);
+
+        // 🔹 Boosters (global list)
+        const boostersSnap = await getDocs(collection(db, "boosters"));
+        const boostersList = boostersSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setAllBoosters(boostersList);
 
         // 🔹 Players per stage
         const infoByStage = {};
@@ -217,6 +227,7 @@ const ViewSquads = () => {
 						{stages.map((stage) => {
 						  const stageSquad = mgr.squadsByStage?.[stage.id] || [];
 						  const open = expandedStages[mgr.uid]?.[stage.id];
+						  const showBoosterColumn = stage?.enableBoosters === true;
 
 						  return (
 							  <div
@@ -261,6 +272,9 @@ const ViewSquads = () => {
 										  <th className="border px-2 py-1 text-left">Player</th>
 										  <th className="border px-2 py-1 text-right">Role</th>
 										  <th className="border px-2 py-1 text-right">Team</th>
+                                          {showBoosterColumn && (
+                                            <th className="border px-2 py-1 text-left">Booster</th>
+                                          )}										  
 										</tr>
 									  </thead>
 
@@ -271,12 +285,19 @@ const ViewSquads = () => {
 										).map((sel) => {
 										  const p = resolvePlayer(stage.id, sel.playerId);
 										  if (!p) return null;
+										  
+										  const boosterId = sel?.boosterId ?? "none";
 
 										  return (
 											<tr key={sel.playerId}>
 											  <td className="border px-2 py-1">{p.playerName}</td>
 											  <td className="border px-2 py-1 text-right">{p.role}</td>
 											  <td className="border px-2 py-1 text-right">{p.team}</td>
+                                              {showBoosterColumn && (
+                                                <td className="border px-2 py-1">
+                                                  {resolveBoosterName(boosterId)}
+                                                </td>
+                                              )}											  
 											</tr>
 										  );
 										})}
