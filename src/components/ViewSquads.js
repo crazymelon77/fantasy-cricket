@@ -36,6 +36,29 @@ const ViewSquads = () => {
   const resolvePlayer = (stageId, playerId) =>
     playersByStage[stageId]?.[playerId];
 
+  // ---- helpers for stage header stats ----
+  const getStageSubsText = (mgr, stage) => {
+    const used = Number(mgr?.subsUsedByStage?.[stage.id] ?? 0);
+    const allowed = Number(stage?.subsAllowed ?? 0);
+    if (!used && !allowed) return null;
+    return `Subs Used: ${used}`;
+  };
+
+  const getStageBudgetText = (mgr, stage) => {
+    const total = Number(stage?.budget ?? 0);
+    const remainingRaw = mgr?.budgetsByStage?.[stage.id];
+    const remaining =
+      remainingRaw == null
+        ? null
+        : Number.isFinite(Number(remainingRaw))
+        ? Number(remainingRaw)
+        : null;
+
+    if (!total || remaining == null) return null;
+    const used = total - remaining;
+    return `Total Team Cost: ${used}`;
+  };	
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -122,6 +145,8 @@ const ViewSquads = () => {
             uid: uDoc.id,
             label,
             squadsByStage: rec.stages || {}, // { [stageId]: [{ playerId, teamId }] }
+            subsUsedByStage: rec.subsUsed || {}, // { [stageId]: number }
+            budgetsByStage: rec.budgets || {}, // { [stageId]: remainingBudget }			
           });
         });
 
@@ -246,8 +271,19 @@ const ViewSquads = () => {
 							  	backgroundColor: "#dbeafe"   // same shade used in PlayerBreakdown
 							    }}
 							  >
-							    <span className="font-semibold"><b>{stage.name}</b></span>
-							  
+							    <span className="font-semibold">
+                                  {(() => {
+                                    const subsText = getStageSubsText(mgr, stage);
+                                    const budgetText = getStageBudgetText(mgr, stage);
+                                    return (
+                                      <>
+                                        <b>{stage.name}{" "}</b>									  
+                                        {subsText ? <span style={{ marginRight: 10 }}>{subsText}</span> : null}
+                                        {budgetText ? <span style={{ marginRight: 10 }}>{budgetText}</span> :null}
+                                     </>
+                                   );
+                                  })()}
+                                </span>							  
 							    <button
 							  	className="btn-secondary"
 							  	onClick={() => toggleStage(mgr.uid, stage.id)}
